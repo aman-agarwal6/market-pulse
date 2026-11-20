@@ -59,8 +59,19 @@
       <div class="panel span-8 heat-panel">
         <div class="panel-head">
           <div>
-            <h2>S&amp;P 500 Heatmap</h2>
-            <p class="sub" id="heatSub">Size = market cap · color = performance · click a tile to open its chart, click a sector name to zoom</p>
+            <h2>S&amp;P 500 explorer</h2>
+            <p class="sub" id="heatSub">Tile size shows market cap. Color shows price change.</p>
+          </div>
+          <div class="seg view-switch" id="heatView" role="group" aria-label="Explorer view">
+            <button data-v="map" class="on" aria-pressed="true">Heatmap</button>
+            <button data-v="list" aria-pressed="false">Rankings</button>
+          </div>
+        </div>
+        <div class="explorer-tools">
+          <div class="explorer-scope">
+            <select id="heatSector" aria-label="Filter by sector"><option value="">All sectors</option></select>
+            <input type="search" class="search" id="heatSearch" placeholder="Find ticker or company" aria-label="Find ticker or company" autocomplete="off" spellcheck="false">
+            <span id="heatCount" role="status"></span>
           </div>
           <div class="controls">
             <div class="seg" id="heatMode" title="What the color shows">
@@ -72,13 +83,23 @@
             <div class="seg" id="heatSize">
               <button data-v="mc" class="on">Cap</button><button data-v="eq">Equal</button>
             </div>
-            <input class="search" id="heatSearch" placeholder="Find ticker…" autocomplete="off" spellcheck="false">
           </div>
         </div>
         <div class="heatmap" id="heatmap"></div>
+        <div id="heatList" hidden>
+          <table class="rank-table" aria-label="Stock rankings">
+            <thead><tr>
+              <th scope="col"><button data-sort="label">Ticker</button></th>
+              <th scope="col"><button data-sort="price">Price</button></th>
+              <th scope="col" class="rank-cap"><button data-sort="size">Market cap</button></th>
+              <th scope="col" aria-sort="descending"><button data-sort="metric" id="rankMetric">1D change</button></th>
+            </tr></thead>
+            <tbody id="rankRows"></tbody>
+          </table>
+        </div>
+        <p class="explorer-empty" id="heatEmpty" hidden></p>
         <div class="heat-foot">
           <div class="legend-scale" id="heatLegend"></div>
-          <div class="heat-sectors" id="heatSectorFilter"></div>
         </div>
       </div>
 

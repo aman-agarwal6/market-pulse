@@ -1,7 +1,7 @@
 // Market Pulse — client entry point. Connects to the live SSE stream and
 // renders every panel.
-import { $, $$, esc, seg, debounce, heatColor, fmtPct, cls, setCVD, TF_MAX } from './util.js';
-import { Heatmap } from './heatmap.js';
+import { $, $$, esc, seg, debounce, heatColor, fmtPct, fmtPrice, fmtBig, cls, setCVD, TF_MAX, TF_LABEL } from './util.js';
+import { Heatmap, matchesStock } from './heatmap.js';
 import * as P from './panels.js';
 import * as C from './charts.js';
 import { initDetail, openDetail, refreshDetail } from './detail.js';
@@ -11,6 +11,7 @@ let sparks = {};
 let sparksVersion = 0;
 const ui = {
   heatTf: 'c', heatMode: 'perf', heatSize: 'mc', heatSector: null, search: '',
+  heatView: 'map', rankSort: 'metric', rankDirection: -1,
   secTf: 'c', moverTab: 'losers', cryptoTf: 'c',
   cvd: false,
 };
@@ -87,7 +88,7 @@ const heatTfEff = () => (ui.heatMode === 'perf' ? ui.heatTf : ui.heatMode);
 const heat = new Heatmap($('#heatmap'), {
   grouped: true,
   onClick: it => it && openDetail(it.key),
-  onSector: name => { ui.heatSector = name; heat.setOpts({ sector: name }); renderSectorFilter(); },
+  onSector: selectSector,
   sparks: () => sparks,
   colorFor: heatColorFor,
   fmtFor: heatFmtFor,
@@ -104,7 +105,7 @@ const cryptoHeat = new Heatmap($('#cryptomap'), {
 function heatItems() {
   return S.stocks.map(x => ({
     key: x.ys, sym: x.ys, label: x.s, name: x.n, group: x.sec, sub: x.ind, size: x.mc, price: x.p,
-    perf: { c: x.c, ...x.perf, ext: x.ext?.c ?? null, rv: x.av ? x.v / x.av : null, off: x.h52 ? (x.p / x.h52 - 1) * 100 : null },
+    perf: { c: x.c, ...x.perf, ext: x.ext?.c ?? null, rv: x.av && x.v != null ? x.v / x.av : null, off: x.h52 ? (x.p / x.h52 - 1) * 100 : null },
     extra: `<div class="tt-row"><span>Volume</span><b>${x.v ? (x.v / 1e6).toFixed(1) + 'M' : '—'}${x.av ? ` · ${(x.v / x.av).toFixed(1)}x avg` : ''}</b></div>`,
   }));
 }
@@ -130,19 +131,96 @@ function renderHeatLegend() {
   $('#heatLegend').innerHTML = steps.map(v => `<span style="background:${heatColor(v, max)}">${v > 0 ? '+' : ''}${Number.isInteger(v) ? v : v.toFixed(1)}%</span>`).join('');
 }
 function renderSectorFilter() {
-  const secs = [...S.sectors].sort((a, b) => b.mc - a.mc);
-  const tf = ui.heatTf;
-  $('#heatSectorFilter').innerHTML = `<button data-sec="" class="${!ui.heatSector ? 'on' : ''}">All</button>` + secs.map(s => {
-    const v = s[tf === 'c' ? 'c' : tf];
-    return `<button data-sec="${esc(s.name)}" class="${ui.heatSector === s.name ? 'on' : ''}">${esc(s.short)}<span class="num ${cls(v)}">${fmtPct(v, 1)}</span></button>`;
-  }).join('');
+  const select = $('#heatSector');
+  const sectors = [...(S?.sectors || [])].sort((a, b) => a.name.localeCompare(b.name));
+  const options = '<option value="">All sectors</option>' + sectors.map(s =>
+    `<option value="${esc(s.name)}">${esc(s.name)} · ${TF_LABEL[ui.heatTf]} ${fmtPct(s[ui.heatTf], 1)}</option>`
+  ).join('');
+  if (select._options !== options) {
+    select.innerHTML = options;
+    select._options = options;
+  }
+  select.value = ui.heatSector || '';
 }
-$('#heatSectorFilter').addEventListener('click', e => {
-  const b = e.target.closest('button');
-  if (!b) return;
-  ui.heatSector = b.dataset.sec || null;
-  heat.setOpts({ sector: ui.heatSector });
-  renderSectorFilter();
+
+function selectSector(name) {
+  ui.heatSector = name || null;
+  $('#heatSector').value = name || '';
+  refreshExplorer();
+}
+$('#heatSector').addEventListener('change', e => selectSector(e.target.value));
+
+function matchingItems(query = ui.search) {
+  const list = ui.heatView === 'list';
+  const q = query.trim().toUpperCase();
+  return heat.items.filter(it =>
+    (!ui.heatSector || it.group === ui.heatSector) &&
+    (list || ui.heatSize === 'eq' || heat.sizeOf(it) > 0) && matchesStock(it, q));
+}
+
+function renderRankings(items) {
+  const tf = heatTfEff();
+  const key = ui.rankSort;
+  const value = it => key === 'metric' ? it.perf[tf] : it[key];
+  items.sort((a, b) => {
+    const av = value(a), bv = value(b);
+    if (av == null || bv == null) return Number(av == null) - Number(bv == null) || a.label.localeCompare(b.label);
+    const diff = key === 'label' ? av.localeCompare(bv) : av - bv;
+    return diff * ui.rankDirection || a.label.localeCompare(b.label);
+  });
+  $('#rankMetric').textContent = TF_LABEL[tf] ? TF_LABEL[tf] + ' change' :
+    { ext: 'Ext. change', rv: 'Rel. volume', off: 'Off high' }[tf];
+  for (const b of $$('#heatList [data-sort]')) {
+    const th = b.closest('th');
+    if (b.dataset.sort === key) th.setAttribute('aria-sort', ui.rankDirection === 1 ? 'ascending' : 'descending');
+    else th.removeAttribute('aria-sort');
+  }
+  const rows = $('#rankRows');
+  const html = items.map(it => {
+    const v = it.perf[tf];
+    return `<tr><td><button data-sym="${esc(it.key)}"><b>${esc(it.label)}</b><small>${esc(it.name)}</small></button></td>
+      <td>${fmtPrice(it.price)}</td><td class="rank-cap">${fmtBig(it.size, '$')}</td>
+      <td><span class="rank-value ${tf === 'rv' ? 'flat' : cls(v)}">${heatFmtFor(v, tf)}</span></td></tr>`;
+  }).join('');
+  if (html !== rows._html) {
+    const focused = rows.contains(document.activeElement) && document.activeElement.dataset.sym;
+    rows.innerHTML = html;
+    rows._html = html;
+    if (focused) rows.querySelector(`[data-sym="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
+  }
+}
+
+function refreshExplorer(live = false) {
+  const list = ui.heatView === 'list';
+  const opts = { tf: heatTfEff(), size: ui.heatSize, sector: ui.heatSector, search: ui.search };
+  $('#heatSize').hidden = list;
+  $('#heatTf').hidden = ui.heatMode !== 'perf';
+  $('#heatmap').hidden = list;
+  if (live) heat.update(heatItems(), opts);
+  else heat.setOpts(opts);
+  const matches = matchingItems();
+  const n = matches.length;
+  $('#heatList').hidden = !list || !n;
+  $('#heatmap').hidden = list || !n;
+  $('#heatLegend').parentElement.hidden = list || !n;
+  const empty = $('#heatEmpty');
+  empty.hidden = !!n;
+  empty.textContent = !heat.items.length ? 'Waiting for stock quotes. The explorer updates automatically.' :
+    ui.search.trim() ? 'No matching stocks. Try another ticker or company name.' :
+    list ? 'No stock quotes available for this sector.' : 'No tiles available. Try another sector, equal sizing or rankings.';
+  const count = n + (ui.search.trim() ? (n === 1 ? ' match' : ' matches') : (n === 1 ? ' stock' : ' stocks'));
+  if ($('#heatCount').textContent !== count) $('#heatCount').textContent = count;
+  if (list) renderRankings(matches);
+  renderHeatSub();
+  renderHeatLegend();
+}
+
+$('#heatList thead').addEventListener('click', e => {
+  const key = e.target.closest('[data-sort]')?.dataset.sort;
+  if (!key) return;
+  ui.rankDirection = ui.rankSort === key ? -ui.rankDirection : key === 'label' ? 1 : -1;
+  ui.rankSort = key;
+  renderRankings(matchingItems());
 });
 
 // ---------------------------------------------------------------------------
@@ -163,9 +241,7 @@ function renderAll() {
   safe('tape', () => P.renderTape($('#tapeInner'), S.stocks));
   safe('regime', () => P.renderRegime($('#regime'), S));
   safe('futures', () => P.renderFutures($('#futures'), S.futures || [], S.market.state));
-  safe('heat', () => heat.update(heatItems(), { tf: heatTfEff(), size: ui.heatSize, sector: ui.heatSector, search: ui.search }));
-  safe('heatSub', renderHeatSub);
-  safe('legend', renderHeatLegend);
+  safe('heat', () => refreshExplorer(true));
   safe('secfilter', renderSectorFilter);
   safe('fear', () => C.fearGauge($('#fear'), S.fear));
   safe('brief', () => P.renderBrief($('#brief'), S.brief));
@@ -217,10 +293,12 @@ const etFmt = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', h
 function tickClock() {
   $('#clockET').textContent = etFmt.format(new Date());
   if (S) {
-    const age = Math.round((Date.now() - S.ts) / 1000);
+    const last = S.status?.quotes;
+    const age = last ? Math.max(0, Math.floor((Date.now() - last) / 1000)) : null;
     const el = $('#updated');
-    el.textContent = connected ? `updated ${age}s ago` : 'reconnecting…';
-    el.classList.toggle('stale', !connected || age > 120);
+    const elapsed = age < 60 ? age + 's' : age < 3600 ? Math.floor(age / 60) + 'm' : Math.floor(age / 3600) + 'h';
+    el.textContent = !connected ? 'Reconnecting…' : last ? `Quotes fetched ${elapsed} ago` : 'Waiting for quotes';
+    el.classList.toggle('stale', !connected || !last || age > 120);
   }
 }
 setInterval(tickClock, 1000);
@@ -240,35 +318,27 @@ function renderStatus() {
 // ---------------------------------------------------------------------------
 // Controls
 // ---------------------------------------------------------------------------
-seg($('#heatTf'), v => { ui.heatTf = v; heat.setOpts({ tf: heatTfEff() }); renderHeatLegend(); renderSectorFilter(); });
-seg($('#heatMode'), v => {
-  ui.heatMode = v;
-  $('#heatTf').classList.toggle('dim', v !== 'perf');
-  heat.setOpts({ tf: heatTfEff() });
-  renderHeatLegend(); renderHeatSub();
+seg($('#heatView'), v => {
+  ui.heatView = v;
+  for (const b of $$('#heatView button')) b.setAttribute('aria-pressed', String(b.dataset.v === v));
+  refreshExplorer();
 });
+seg($('#heatTf'), v => { ui.heatTf = v; refreshExplorer(); renderSectorFilter(); });
+seg($('#heatMode'), v => { ui.heatMode = v; refreshExplorer(); });
 function renderHeatSub() {
-  const m = ui.heatMode;
-  const hasExt = S?.stocks.some(x => x.ext);
-  const touch = matchMedia('(hover: none)').matches;
-  const txt = {
-    perf: touch
-      ? 'Size = market cap · color = performance · tap a tile to open its chart, tap a sector name to zoom'
-      : 'Size = market cap · color = performance · hover for detail, click a tile to open its chart, click a sector name to zoom',
-    ext: hasExt ? 'Color = pre-market / after-hours change vs the regular-session close' : 'No extended-hours trading right now — pre-market runs 4:00–9:30 ET, after-hours 16:00–20:00 ET',
-    rv: "Color = today's volume vs the 10-day average · bright amber = unusual activity (where the money is concentrating)",
-    off: 'Color = distance from the 52-week high · shows how much damage each stock has taken',
-  }[m];
-  $('#heatSub').textContent = txt;
+  const metric = { perf: 'price change', ext: 'extended-hours change', rv: 'volume relative to the 10-day average', off: 'distance from the 52-week high' }[ui.heatMode];
+  $('#heatSub').textContent = ui.heatView === 'list'
+    ? 'Select a column to sort or a ticker to open its chart.'
+    : (ui.heatSize === 'eq' ? 'Tiles have equal weight.' : 'Tile size shows market cap.') + ' Color shows ' + metric + '.';
 }
-seg($('#heatSize'), v => { ui.heatSize = v; heat.setOpts({ size: v }); });
-$('#heatSearch').addEventListener('input', debounce(e => { ui.search = e.target.value; heat.setOpts({ search: ui.search }); }, 120));
+seg($('#heatSize'), v => { ui.heatSize = v; refreshExplorer(); });
+$('#heatSearch').addEventListener('input', e => { ui.search = e.target.value; refreshExplorer(); });
 $('#heatSearch').addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
-    const q = e.target.value.trim().toUpperCase();
-    const hit = S?.stocks.find(x => x.s === q) || S?.stocks.find(x => x.s.startsWith(q));
-    if (hit) openDetail(hit.ys);
-  }
+  if (e.key !== 'Enter' || !e.target.value.trim()) return;
+  const matches = matchingItems(e.target.value);
+  const q = e.target.value.trim().toUpperCase();
+  const hit = matches.find(it => it.label === q) || matches[0];
+  if (hit) openDetail(hit.key);
 });
 seg($('#secTf'), v => { ui.secTf = v; P.renderSectorBars($('#sectorBars'), S.sectors, v); });
 seg($('#moverTab'), v => { ui.moverTab = v; P.renderMovers($('#movers'), S.movers, v); });

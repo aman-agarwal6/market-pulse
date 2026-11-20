@@ -2,6 +2,10 @@
 // colors and positions can animate between live updates.
 import { heatColor, fmtPct, fmtPrice, fmtBig, esc, showTip, moveTip, hideTip, sparkSVG, TF_MAX, TF_LABEL, cls } from './util.js';
 
+export function matchesStock(item, query) {
+  return item.label.toUpperCase().startsWith(query) || (item.name || '').toUpperCase().includes(query);
+}
+
 export class Heatmap {
   constructor(el, { grouped = true, onClick, onSector, maxFor = tf => TF_MAX[tf] || 3, sparks = () => ({}), tfLabels = TF_LABEL, colorFor = null, fmtFor = null } = {}) {
     this.el = el;
@@ -43,8 +47,8 @@ export class Heatmap {
   }
 
   sizeOf(it) {
-    if (!this.frozen.has(it.key)) this.frozen.set(it.key, it.size || 0);
-    return this.frozen.get(it.key);
+    if (!this.frozen.has(it.key) && it.size > 0) this.frozen.set(it.key, it.size);
+    return this.frozen.get(it.key) || 0;
   }
 
   update(items, opts = {}) {
@@ -61,11 +65,17 @@ export class Heatmap {
 
   render(live = false) {
     const W = this.el.clientWidth, H = this.el.clientHeight;
-    if (!W || !H || !this.items.length) return;
+    if (!W || !H) return;
     const { tf, size, sector, search } = this.opts;
     this.el.classList.toggle('zoomed', !!sector);
-    let items = this.items.filter(x => this.sizeOf(x) > 0);
+    let items = size === 'eq' ? this.items : this.items.filter(x => this.sizeOf(x) > 0);
     if (sector) items = items.filter(x => x.group === sector);
+    if (!items.length) {
+      this.el.replaceChildren();
+      this.cells.clear();
+      this.sectorEls.clear();
+      return;
+    }
 
     let rootData;
     if (this.grouped) {
@@ -144,7 +154,7 @@ export class Heatmap {
         if (h > fs * 4.2 && w > 90 && it.name) html += `<div class="nm">${esc(it.name)}</div>`;
       }
       if (el._html !== html) { el.innerHTML = html; el._html = html; }
-      el.classList.toggle('match', !!q && (it.label.toUpperCase().startsWith(q) || (it.name || '').toUpperCase().includes(q)));
+      el.classList.toggle('match', !!q && matchesStock(it, q));
 
       if (live) {
         const prev = this.prevPrice.get(it.key);

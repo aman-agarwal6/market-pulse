@@ -190,6 +190,40 @@ main { padding: 16px 20px 40px; max-width: 2200px; margin: 0 auto; }
 
 /* ---------- Heatmap ---------- */
 .heat-panel { display: flex; flex-direction: column; }
+.heat-panel [hidden] { display: none !important; }
+.heat-panel .panel-head { align-items: center; }
+.heat-panel .panel-head h2 { font-size: 20px; letter-spacing: -.035em; text-transform: none; }
+.heat-panel .panel-head h2::before { display: none; }
+.heat-panel .sub { color: var(--ink-2); }
+.view-switch button { padding: 7px 12px; }
+.explorer-tools { display: grid; gap: 9px; padding: 12px 0; margin-bottom: 10px; border-block: 1px solid var(--line-2); }
+.explorer-scope { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.explorer-scope select, .explorer-scope .search { height: 33px; padding: 0 9px; border: 1px solid var(--line-2); border-radius: 5px; color: var(--ink); background: var(--bg-2); font: 12px var(--sans); }
+.explorer-scope select { max-width: 100%; width: 215px; cursor: pointer; }
+.explorer-scope .search { width: 180px; text-transform: none; }
+.explorer-scope .search::placeholder { color: var(--ink-2); }
+#heatCount { margin-left: auto; color: var(--ink-2); font: 11px var(--mono); }
+.explorer-empty { display: grid; place-items: center; text-align: center; min-height: 160px; margin: 0; padding: 24px; background: var(--bg-2); color: var(--ink-2); }
+#heatList { height: clamp(420px, 70vh, 850px); overflow: auto; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+.rank-table { width: 100%; border-spacing: 0; font: 12px var(--mono); color: var(--ink); }
+.rank-table th, .rank-table td { text-align: right; padding: 9px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.rank-table th:first-child, .rank-table td:first-child { text-align: left; }
+.rank-table th { position: sticky; top: 0; z-index: 1; background: var(--panel-3); }
+.rank-table button { color: inherit; background: transparent; padding: 2px 0; border: 0; cursor: pointer; text-align: inherit; }
+.rank-table th button { font: 600 11px var(--sans); color: var(--ink-2); }
+.rank-table th[aria-sort] button { color: var(--amber); }
+.rank-table th[aria-sort="ascending"] button::after { content: ' ↑'; }
+.rank-table th[aria-sort="descending"] button::after { content: ' ↓'; }
+.rank-table td b { display: block; font: 600 13px var(--mono); }
+.rank-table td small { display: block; font: 12px var(--sans); color: var(--ink-2); white-space: normal; }
+.rank-table tbody tr:hover, .rank-table tbody tr:focus-within { background: var(--panel-3); }
+.rank-value { display: inline-block; padding: 4px 7px; border-radius: 4px; background: color-mix(in srgb, currentColor 9%, transparent); }
+@media (max-width: 600px) {
+  .explorer-scope select { width: 48%; min-width: 0; }
+  .explorer-scope #heatSearch { min-width: 0; }
+  .rank-cap { display: none; }
+  .rank-table th, .rank-table td { padding: 8px 6px; }
+}
 .heatmap { position: relative; width: 100%; height: clamp(520px, 64vh, 900px); background: #000; border-radius: 4px; overflow: hidden; user-select: none; }
 .crypto-map { height: 470px; }
 .hm-sector { position: absolute; pointer-events: none; }
