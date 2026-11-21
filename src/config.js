@@ -173,6 +173,102 @@ export const FUTURES = [
 
 export const EXTRA = ['SPHB', 'SPLV', 'RSP', 'XLY', 'XLP'];
 
+// ---------------------------------------------------------------------------
+// Core ETF building blocks (/api/etfs), grouped by role.
+// ---------------------------------------------------------------------------
+export const ETFS = [
+  { s: 'VTI', role: 'US total market', label: 'Vanguard Total Stock Market' },
+  { s: 'VOO', role: 'US large cap', label: 'Vanguard S&P 500' },
+  { s: 'SPY', role: 'US large cap', label: 'SPDR S&P 500' },
+  { s: 'IVV', role: 'US large cap', label: 'iShares Core S&P 500' },
+  { s: 'RSP', role: 'US large cap', label: 'Invesco S&P 500 Equal Weight' },
+  { s: 'QQQ', role: 'US growth', label: 'Invesco QQQ (Nasdaq 100)' },
+  { s: 'VUG', role: 'US growth', label: 'Vanguard Growth' },
+  { s: 'VTV', role: 'US value / dividend', label: 'Vanguard Value' },
+  { s: 'SCHD', role: 'US value / dividend', label: 'Schwab US Dividend Equity' },
+  { s: 'VIG', role: 'US value / dividend', label: 'Vanguard Dividend Appreciation' },
+  { s: 'IWM', role: 'US small cap', label: 'iShares Russell 2000' },
+  { s: 'VB', role: 'US small cap', label: 'Vanguard Small-Cap' },
+  { s: 'VXUS', role: 'International (all ex-US)', label: 'Vanguard Total International Stock' },
+  { s: 'VEA', role: 'International developed', label: 'Vanguard FTSE Developed Markets' },
+  { s: 'EFA', role: 'International developed', label: 'iShares MSCI EAFE' },
+  { s: 'VWO', role: 'Emerging markets', label: 'Vanguard FTSE Emerging Markets' },
+  { s: 'EEM', role: 'Emerging markets', label: 'iShares MSCI Emerging Markets' },
+  { s: 'BND', role: 'Bonds', label: 'Vanguard Total Bond Market' },
+  { s: 'AGG', role: 'Bonds', label: 'iShares Core US Aggregate Bond' },
+  { s: 'SHY', role: 'Bonds', label: 'iShares 1-3 Year Treasury' },
+  { s: 'IEF', role: 'Bonds', label: 'iShares 7-10 Year Treasury' },
+  { s: 'TLT', role: 'Bonds', label: 'iShares 20+ Year Treasury' },
+  { s: 'TIP', role: 'Bonds', label: 'iShares TIPS (inflation-protected)' },
+  { s: 'VNQ', role: 'Real assets', label: 'Vanguard Real Estate (REITs)' },
+  { s: 'GLD', role: 'Real assets', label: 'SPDR Gold Shares' },
+  { s: 'IBIT', role: 'Crypto', label: 'iShares Bitcoin Trust' },
+  { s: 'VT', role: 'All-in-one', label: 'Vanguard Total World Stock' },
+  { s: 'AOR', role: 'All-in-one', label: 'iShares Core 60/40 Balanced Allocation' },
+];
+
+// ---------------------------------------------------------------------------
+// Economy (/api/macro): FRED series. transform: level | yoy (% vs 12 months
+// earlier) | diff (change vs previous observation). freq: D W M Q.
+// higherIsHotter: true when a higher reading means a hotter economy / more
+// inflation pressure, false when higher means cooler, null when it is neither.
+// ---------------------------------------------------------------------------
+export const MACRO_SERIES = [
+  { key: 'cpi', id: 'CPIAUCSL', group: 'Inflation', title: 'CPI inflation', unit: '% YoY', freq: 'M', transform: 'yoy', higherIsHotter: true,
+    what: 'How much consumer prices rose over the past 12 months.', why: 'Inflation eats real returns and drives Fed rate decisions; the Fed aims for about 2%.' },
+  { key: 'coreCpi', id: 'CPILFESL', group: 'Inflation', title: 'Core CPI inflation', unit: '% YoY', freq: 'M', transform: 'yoy', higherIsHotter: true,
+    what: 'CPI excluding food and energy, which swing a lot.', why: 'Shows the stickier underlying trend the Fed watches closely.' },
+  { key: 'pce', id: 'PCEPI', group: 'Inflation', title: 'PCE inflation', unit: '% YoY', freq: 'M', transform: 'yoy', higherIsHotter: true,
+    what: 'Price index for personal consumption, a broader inflation measure than CPI.', why: 'This is the measure behind the Fed\'s official 2% target.' },
+  { key: 'corePce', id: 'PCEPILFE', group: 'Inflation', title: 'Core PCE inflation', unit: '% YoY', freq: 'M', transform: 'yoy', higherIsHotter: true,
+    what: 'PCE inflation excluding food and energy.', why: 'The Fed\'s favourite gauge of underlying inflation.' },
+  { key: 'breakeven10', id: 'T10YIE', group: 'Inflation', title: '10-year breakeven inflation', unit: '%', freq: 'D', transform: 'level', higherIsHotter: true,
+    what: 'Average yearly inflation over 10 years implied by regular vs inflation-protected Treasury yields.', why: 'Shows whether bond investors expect inflation to stay contained.' },
+  { key: 'unemployment', id: 'UNRATE', group: 'Jobs', title: 'Unemployment rate', unit: '%', freq: 'M', transform: 'level', higherIsHotter: false,
+    what: 'Share of people in the labour force who want a job and do not have one.', why: 'Rising unemployment is one of the clearest signs of a slowing economy.' },
+  { key: 'payrolls', id: 'PAYEMS', group: 'Jobs', title: 'Payroll job growth', unit: 'thousand jobs / month', freq: 'M', transform: 'diff', higherIsHotter: true,
+    what: 'Jobs added (or lost) by US employers last month.', why: 'Steady job growth supports spending and corporate earnings.' },
+  { key: 'claims', id: 'ICSA', group: 'Jobs', title: 'Initial jobless claims', unit: 'claims / week', freq: 'W', transform: 'level', higherIsHotter: false,
+    what: 'New applications for unemployment benefits each week.', why: 'The fastest-moving labour indicator; sustained rises often lead recessions.' },
+  { key: 'sahm', id: 'SAHMREALTIME', group: 'Jobs', title: 'Sahm rule indicator', unit: 'pct. points', freq: 'M', transform: 'level', higherIsHotter: false,
+    what: '3-month average unemployment rate minus its lowest 3-month average of the prior year.', why: 'A reading of 0.5 or more has historically signalled the early months of a recession.' },
+  { key: 'gdp', id: 'A191RL1Q225SBEA', group: 'Growth', title: 'Real GDP growth', unit: '% annualized (q/q)', freq: 'Q', transform: 'level', higherIsHotter: true,
+    what: 'Inflation-adjusted growth of the whole economy last quarter, at an annual rate.', why: 'Earnings grow with the economy over the long run.' },
+  { key: 'indpro', id: 'INDPRO', group: 'Growth', title: 'Industrial production', unit: '% YoY', freq: 'M', transform: 'yoy', higherIsHotter: true,
+    what: 'Output of factories, mines and utilities vs a year ago.', why: 'A cyclical part of the economy that often turns before the rest.' },
+  { key: 'sentiment', id: 'UMCSENT', group: 'Growth', title: 'Consumer sentiment (U. Michigan)', unit: 'index (1966 = 100)', freq: 'M', transform: 'level', higherIsHotter: true,
+    what: 'Survey of how confident households feel about their finances and the economy.', why: 'Consumer spending is about two-thirds of the US economy.' },
+  { key: 'fedFunds', id: 'DFF', group: 'Rates', title: 'Fed funds rate (effective)', unit: '%', freq: 'D', transform: 'level', higherIsHotter: null,
+    what: 'The overnight interest rate the Federal Reserve targets.', why: 'Sets the base cost of money; higher rates cool the economy and make cash and bonds more competitive with stocks.' },
+  { key: 'y2', id: 'DGS2', group: 'Rates', title: '2-year Treasury yield', unit: '%', freq: 'D', transform: 'level', higherIsHotter: null,
+    what: 'Yield on 2-year US government bonds.', why: 'Tracks where markets expect the Fed to set rates over the next two years.' },
+  { key: 'y10', id: 'DGS10', group: 'Rates', title: '10-year Treasury yield', unit: '%', freq: 'D', transform: 'level', higherIsHotter: null,
+    what: 'Yield on 10-year US government bonds.', why: 'The benchmark for mortgages and for valuing stocks; higher yields make future earnings worth less today.' },
+  { key: 'real10', id: 'DFII10', group: 'Rates', title: '10-year real yield (TIPS)', unit: '%', freq: 'D', transform: 'level', higherIsHotter: null,
+    what: '10-year Treasury yield after expected inflation.', why: 'The true return on safe bonds; high real yields are a headwind for stock valuations.' },
+  { key: 's10y2y', id: 'T10Y2Y', group: 'Rates', title: 'Yield curve: 10-year minus 2-year', unit: 'pct. points', freq: 'D', transform: 'level', higherIsHotter: null,
+    what: 'Gap between long and short Treasury yields.', why: 'Below zero ("inverted") has preceded most US recessions, usually by many months.' },
+  { key: 's10y3m', id: 'T10Y3M', group: 'Rates', title: 'Yield curve: 10-year minus 3-month', unit: 'pct. points', freq: 'D', transform: 'level', higherIsHotter: null,
+    what: 'Gap between the 10-year yield and the 3-month bill yield.', why: 'The spread used by the New York Fed\'s recession-probability model.' },
+  { key: 'mortgage30', id: 'MORTGAGE30US', group: 'Rates', title: '30-year mortgage rate', unit: '%', freq: 'W', transform: 'level', higherIsHotter: null,
+    what: 'Average rate on a new 30-year fixed mortgage (Freddie Mac survey).', why: 'Drives housing affordability and activity.' },
+  { key: 'hySpread', id: 'BAMLH0A0HYM2', group: 'Credit & conditions', title: 'High-yield credit spread', unit: 'pct. points', freq: 'D', transform: 'level', higherIsHotter: false,
+    what: 'Extra yield junk-rated companies pay over Treasuries (ICE BofA US High Yield OAS).', why: 'Widening spreads mean lenders fear defaults; they usually widen in recessions and selloffs.' },
+  { key: 'baaSpread', id: 'BAA10Y', group: 'Credit & conditions', title: 'Baa corporate spread', unit: 'pct. points', freq: 'D', transform: 'level', higherIsHotter: false,
+    what: 'Moody\'s Baa corporate bond yield minus the 10-year Treasury yield.', why: 'A long-history credit stress gauge (FRED only keeps 3 years of the high-yield spread).' },
+  { key: 'nfci', id: 'NFCI', group: 'Credit & conditions', title: 'Financial conditions (Chicago Fed NFCI)', unit: 'index (0 = average)', freq: 'W', transform: 'level', higherIsHotter: false,
+    what: 'Summary of risk, credit and leverage in financial markets. Positive = tighter than average.', why: 'Tight conditions make borrowing harder and tend to slow the economy.' },
+  { key: 'm2', id: 'M2SL', group: 'Money', title: 'M2 money supply growth', unit: '% YoY', freq: 'M', transform: 'yoy', higherIsHotter: true,
+    what: 'Growth in cash, checking and savings deposits and money funds vs a year ago.', why: 'Rapid growth can feed inflation; contraction is rare and signals tight money.' },
+];
+
+// Extra FRED series used for derived blocks (not listed as standalone cards).
+export const MACRO_AUX = [
+  { key: 'fedTargetLow', id: 'DFEDTARL', freq: 'D' },
+  { key: 'fedTargetHigh', id: 'DFEDTARU', freq: 'D' },
+  { key: 'usrec', id: 'USREC', freq: 'M' },
+];
+
 export function macroSymbols() {
   const set = new Set();
   STRIP.forEach(x => set.add(x.s));

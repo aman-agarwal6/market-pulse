@@ -5,17 +5,26 @@ import fs from 'node:fs/promises';
 import { createReadStream, existsSync } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import * as yahoo from './src/yahoo.js';
 import { loadUniverse } from './src/universe.js';
-import { macroSymbols, intradaySymbols } from './src/config.js';
+import { macroSymbols, intradaySymbols, SECTORS } from './src/config.js';
 import { buildSnapshot, computeHistoryStats, computeSparks, compactQuote } from './src/engine.js';
+import { allStatus, meta as sectionMeta } from './src/store.js';
+import { computeValuation } from './src/valuation.js';
+import { createLongTerm } from './src/longterm.js';
+import { createFundamentals } from './src/fundamentals.js';
+import { createCompany } from './src/company.js';
+import { createETFs } from './src/etfs.js';
+import { createMacro } from './src/macro.js';
+import { getHistory, HISTORY_RANGES, HISTORY_INTERVALS } from './src/history.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3000;
-// Only this PC can open the page by default. Set HOST to listen on another interface.
+// Listens on this PC only by default; set HOST to change the bind address.
 const HOST = process.env.HOST || '127.0.0.1';
-// Optional: set SITE_PASSWORD on the host to ask visitors for a password (any username works).
+// Optional: set SITE_PASSWORD to ask visitors for a password (any username works).
 const SITE_PASSWORD = process.env.SITE_PASSWORD || '';
 const PUBLIC = path.join(__dirname, 'public');
 const DATA = path.join(__dirname, 'data');
@@ -51,6 +60,35 @@ const state = {
 let snapshot = null;
 let snapshotJSON = '';
 const clients = new Set();
+const bootedAt = Date.now();
+
+// ---------------------------------------------------------------------------
+// Research / long-term services (lazy; see src/*.js)
+// ---------------------------------------------------------------------------
+const getState = () => state;
+const getQuote = sym => state.quotes.get(sym) || null;
+
+/** Valuation of today's S&P 500 from the live constituent quotes (formulas in src/valuation.js). */
+let valuationCache = null;
+function getValuation() {
+  if (valuationCache && valuationCache.v === state.status.quotes) return valuationCache.data;
+  if (!state.status.quotes) return { meta: sectionMeta({ ok: false, source: 'Yahoo v7 quotes', error: 'quotes not loaded yet' }) };
+  const tnx = state.quotes.get('^TNX')?.regularMarketPrice;
+  const v = computeValuation(state.universe, state.quotes, tnx, SECTORS.map(s => s.name), { fyEnd: ys => fundamentals.enrichment(ys)?.nextFiscalYearEnd ?? null });
+  const data = {
+    meta: sectionMeta({ ok: true, source: 'Yahoo v7 quotes for every S&P 500 constituent (live) + ^TNX', asOf: new Date(state.status.quotes).toISOString(),
+      note: 'Cap-weighted aggregates: sum of market caps / sum of earnings (loss-makers included). Full (not float-adjusted) caps, so weights differ slightly from S&P\'s official ones. Formulas: src/valuation.js.' }),
+    ...v,
+  };
+  valuationCache = { v: state.status.quotes, data };
+  return data;
+}
+
+const longterm = createLongTerm({ getQuote, getValuation });
+const fundamentals = createFundamentals({ getState });
+const company = createCompany({ getState, getEnrichment: ys => fundamentals.enrichment(ys) });
+const etfs = createETFs({ getQuote });
+const macro = createMacro();
 
 function logErr(where, err) {
   const msg = `${new Date().toLocaleTimeString()} ${where}: ${err.message || err}`;
@@ -158,6 +196,17 @@ function sendJSON(res, code, obj) {
   res.end(body);
 }
 
+/** JSON for the research endpoints: gzip when the client accepts it and the body is large. */
+function sendBigJSON(req, res, obj) {
+  const body = JSON.stringify(obj);
+  if (body.length < 20000 || !/\bgzip\b/.test(req.headers['accept-encoding'] || '')) return sendJSON(res, 200, body);
+  zlib.gzip(body, { level: 6 }, (err, buf) => {
+    if (err) return sendJSON(res, 200, body);
+    res.writeHead(200, { 'Content-Type': MIME['.json'], 'Cache-Control': 'no-store', 'Content-Encoding': 'gzip', Vary: 'Accept-Encoding' });
+    res.end(buf);
+  });
+}
+
 const chartCache = new Map();
 // [yahoo range, interval, visible window in days (null = all)]. Daily ranges fetch
 // extra history so the 50/200-day moving averages are complete on screen.
@@ -228,7 +277,72 @@ async function handleAPI(req, res, url) {
     try { return sendJSON(res, 200, await yahoo.news(q, 12)); }
     catch (err) { return sendJSON(res, 502, { error: err.message }); }
   }
+  const route = ROUTES[p];
+  if (route) {
+    try {
+      const out = await route(url);
+      if (out && out.__status) return sendJSON(res, out.__status, out.body);
+      return sendBigJSON(req, res, out);
+    } catch (err) {
+      if (err.status !== 404) logErr(p, err);
+      return sendJSON(res, err.status === 404 ? 404 : err.status === 503 ? 503 : 502, { error: err.message || 'upstream error' });
+    }
+  }
   sendJSON(res, 404, { error: 'not found' });
+}
+
+// ---------------------------------------------------------------------------
+// Research / long-term / macro routes. Every query parameter is whitelisted.
+// ---------------------------------------------------------------------------
+const SYM_RE = /^[\w^.=\-]{1,20}$/;
+const bad = msg => ({ __status: 400, body: { error: msg } });
+const symParam = url => {
+  const s = (url.searchParams.get('s') || '').trim().toUpperCase();
+  return SYM_RE.test(s) ? s : null;
+};
+
+const ROUTES = {
+  '/api/longterm': () => longterm.get(),
+  '/api/valuation': () => getValuation(),
+  '/api/fundamentals': () => fundamentals.get(),
+  '/api/company': url => {
+    const s = symParam(url);
+    return s ? company.get(s) : bad('bad symbol');
+  },
+  '/api/history': url => {
+    const s = symParam(url);
+    const range = url.searchParams.get('range') || '5y';
+    const interval = url.searchParams.get('interval') || '1d';
+    if (!s) return bad('bad symbol');
+    if (!HISTORY_RANGES.includes(range)) return bad(`range must be one of ${HISTORY_RANGES.join(', ')}`);
+    if (!HISTORY_INTERVALS.includes(interval)) return bad(`interval must be one of ${HISTORY_INTERVALS.join(', ')}`);
+    return getHistory(s, range, interval);
+  },
+  '/api/etfs': () => etfs.get(),
+  '/api/macro': () => macro.get(),
+  '/api/status': () => statusPayload(),
+};
+
+function statusPayload() {
+  const iso = t => (t ? new Date(t).toISOString() : null);
+  const live = [
+    ['quotes', 'Yahoo v7 quotes (S&P 500 + macro symbols)', usMarketOpen() ? 15000 : 45000],
+    ['history', 'Yahoo 1-year daily spark history', 20 * 60000],
+    ['intraday', 'Yahoo 5-minute intraday sparks', 60000],
+    ['news', 'Yahoo news search', 3 * 60000],
+    ['curve', 'US Treasury daily yield curve', 3 * 3600000],
+  ].map(([k, source, every]) => ({
+    name: `dashboard:${k}`, source, ok: !!state.status[k], asOf: iso(state.status[k]), fetchedAt: state.status[k] || null,
+    nextRefresh: state.status[k] ? state.status[k] + every : null, error: null,
+  }));
+  return {
+    now: new Date().toISOString(),
+    uptimeSec: Math.round((Date.now() - bootedAt) / 1000),
+    recentErrors: state.status.errors,
+    yahooBackgroundGate: yahoo.gateStatus(),
+    fundamentalsCrawl: fundamentals.crawlStatus(),
+    datasets: [...live, ...allStatus()].map(d => ({ ...d, fetchedAt: iso(d.fetchedAt), nextRefresh: iso(d.nextRefresh), updated: iso(d.updated), lastErrorAt: iso(d.lastErrorAt), startedAt: iso(d.startedAt), finishedAt: iso(d.finishedAt), nextRun: iso(d.nextRun) })),
+  };
 }
 
 async function serveStatic(req, res, url) {
@@ -257,7 +371,7 @@ function passwordOK(req) {
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-  // Health check for the host; stays open so it works with a password set.
+  // Simple health check; stays open even when a password is set.
   if (url.pathname === '/healthz') { res.writeHead(200, { 'Content-Type': 'text/plain' }); return res.end('ok'); }
   if (SITE_PASSWORD && !passwordOK(req)) {
     res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Market Pulse", charset="UTF-8"', 'Content-Type': 'text/plain' });
@@ -301,6 +415,18 @@ async function main() {
   setTimeout(loop('history', refreshHistory, () => 20 * 60000), 20 * 60000);
   setTimeout(loop('news', refreshNews, () => 3 * 60000), 3 * 60000);
   setTimeout(loop('curve', refreshCurve, () => 3 * 3600000), 3 * 3600000);
+
+  // Heavy research datasets: warm in the background, one after another, after the
+  // dashboard is fully up. All of them are disk-cached, so later boots are quick.
+  // Set NO_BACKGROUND=1 to skip warming (endpoints still load lazily on request).
+  if (!process.env.NO_BACKGROUND) {
+    const later = (ms, fn) => setTimeout(() => fn().catch(e => logErr('warm', e)), ms);
+    later(20000, () => longterm.ensure());
+    later(45000, () => macro.warm());
+    later(90000, () => etfs.warm());
+    fundamentals.schedule(150000);
+    setInterval(() => longterm.ensure().catch(e => logErr('longterm', e)), 6 * 3600000).unref();
+  }
 }
 
 main().catch(err => { console.error(err); process.exit(1); });

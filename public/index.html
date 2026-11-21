@@ -6,308 +6,118 @@
   <meta name="theme-color" content="#05070a">
   <title>Market Pulse</title>
   <script>
-    // Phone layout: pick the saved tab before first paint so the page never flashes the wrong one (tabs.js takes over).
-    try { if (matchMedia('(max-width: 767px)').matches) { var d = document.documentElement, t = localStorage.getItem('mp.tab');
-      d.classList.add('m-on'); d.setAttribute('data-mt', /^(market|flows|stocks|world|news)$/.test(t || '') ? t : 'market'); } } catch (e) {}
+    // Before first paint: phone layout flag and the workspace to highlight (shell.js takes over).
+    try { var d = document.documentElement, h = location.hash, m = /^#\/([\w-]+)/.exec(h), w = m ? m[1] : null,
+        legacy = { overview: 'today', flows: 'markets', breadth: 'markets', global: 'world', rates: 'macro', crypto: 'world', commod: 'world', news: 'news' },
+        old = { market: 'today', flows: 'markets', stocks: 'markets', world: 'world', news: 'news' };
+      if (!w && h) w = legacy[h.slice(1)] || null;
+      if (!w) w = localStorage.getItem('mp.ws') || old[localStorage.getItem('mp.tab')] || 'today';
+      d.setAttribute('data-ws', w);
+      if (localStorage.getItem('mp.notes') === '0') d.classList.add('notes-off');
+      if (matchMedia('(max-width: 767px)').matches) d.classList.add('m-on');
+    } catch (e) {}
   </script>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%2306080b'/><rect x='5' y='5' width='12' height='14' fill='%23f63538'/><rect x='19' y='5' width='8' height='8' fill='%2330cc5a'/><rect x='19' y='15' width='8' height='12' fill='%238b444e'/><rect x='5' y='21' width='12' height='6' fill='%2335764e'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/ui.css">
+  <link rel="stylesheet" href="/css/ws-today.css">
+  <link rel="stylesheet" href="/css/ws-longterm.css">
+  <link rel="stylesheet" href="/css/ws-markets.css">
+  <link rel="stylesheet" href="/css/ws-research.css">
+  <link rel="stylesheet" href="/css/ws-macro.css">
+  <link rel="stylesheet" href="/css/ws-world.css">
+  <link rel="stylesheet" href="/css/ws-news.css">
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <div class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-      <div class="brand-text">MARKET<span>PULSE</span></div>
-    </div>
-    <nav class="nav" id="nav">
-      <a href="#overview">Heatmap</a>
-      <a href="#flows">Money Flow</a>
-      <a href="#breadth">Breadth</a>
-      <a href="#global">Global</a>
-      <a href="#rates">Rates</a>
-      <a href="#crypto">Crypto</a>
-      <a href="#commod">Commod &amp; FX</a>
-      <a href="#news">News</a>
-    </nav>
-    <div class="gsearch">
-      <input id="gsearch" placeholder="Search any ticker…  ( / )" autocomplete="off" spellcheck="false">
-      <div class="gs-results" id="gsResults"></div>
+  <a class="skip" href="#wsRoot">Skip to content</a>
+  <header class="topbar" id="topbar">
+    <a class="brand" href="#/today" aria-label="Market Pulse, go to Today">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      <span class="brand-text">MARKET<span>PULSE</span></span>
+    </a>
+    <nav class="ws-tabs" id="wsTabs" aria-label="Workspaces"></nav>
+    <div class="cmd" role="search">
+      <svg class="cmd-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M16 16l4 4"/></svg>
+      <input id="cmdInput" type="text" role="combobox" aria-expanded="false" aria-controls="cmdList" aria-autocomplete="list"
+        aria-label="Search tickers or commands" placeholder="Ticker or command" autocomplete="off" spellcheck="false" autocapitalize="characters">
+      <kbd class="cmd-kbd" aria-hidden="true">/</kbd>
+      <div class="cmd-pop" id="cmdList" role="listbox" aria-label="Results"></div>
     </div>
     <div class="top-right">
-      <button class="chip-btn" id="cvdToggle" title="Switch to a colorblind-friendly blue/orange palette">Colorblind palette</button>
       <div class="mkt-state" id="mktState"><span class="dot"></span><span class="txt">Connecting…</span></div>
-      <div class="clock"><span id="clockET">--:--:--</span><small>ET</small></div>
-      <div class="updated" id="updated">waiting for data</div>
+      <div class="clock" title="New York time"><span id="clockET">--:--:--</span><small>ET</small></div>
+      <div class="updated" id="updated" role="status">waiting for data</div>
+      <div class="view">
+        <button type="button" class="icon-btn" id="viewBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="viewMenu" title="Display settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span class="sr-only">Display settings</span>
+        </button>
+        <div class="menu" id="viewMenu" role="menu" aria-label="Display settings" hidden>
+          <button type="button" role="menuitemcheckbox" data-pref="notes" aria-checked="true"><span class="sw" aria-hidden="true"></span><span><b>Plain-English notes</b><small>One-line explanations under panel titles</small></span></button>
+          <button type="button" role="menuitemcheckbox" data-pref="cvd" aria-checked="false"><span class="sw" aria-hidden="true"></span><span><b>Colorblind palette</b><small>Blue for gains, orange for losses</small></span></button>
+          <button type="button" role="menuitem" data-act="keys"><span class="kb" aria-hidden="true">?</span><span><b>Keyboard shortcuts</b><small>Workspace keys and command mnemonics</small></span></button>
+        </div>
+      </div>
     </div>
   </header>
 
-  <div class="tape" id="tape"><div class="tape-inner" id="tapeInner"></div></div>
+  <div class="taperow" id="taperow">
+    <div class="readout" id="readout" aria-label="Key indices"></div>
+    <div class="tape" id="tape" aria-hidden="true"><div class="tape-inner" id="tapeInner"></div></div>
+  </div>
 
-  <main>
-   <div class="tp" id="tp-market" data-tp="market" aria-labelledby="mt-market">
-    <section class="strip" id="strip"></section>
-    <section class="futures" id="futures"></section>
-
-    <!-- Regime bar -->
-    <section class="regime" id="regime"></section>
-
-    <!-- OVERVIEW -->
-    <section class="grid" id="overview">
-      <div class="panel span-8 heat-panel">
-        <div class="panel-head">
-          <div>
-            <h2>S&amp;P 500 explorer</h2>
-            <p class="sub" id="heatSub">Tile size shows market cap. Color shows price change.</p>
-          </div>
-          <div class="seg view-switch" id="heatView" role="group" aria-label="Explorer view">
-            <button data-v="map" class="on" aria-pressed="true">Heatmap</button>
-            <button data-v="list" aria-pressed="false">Rankings</button>
-          </div>
-        </div>
-        <div class="explorer-tools">
-          <div class="explorer-scope">
-            <select id="heatSector" aria-label="Filter by sector"><option value="">All sectors</option></select>
-            <input type="search" class="search" id="heatSearch" placeholder="Find ticker or company" aria-label="Find ticker or company" autocomplete="off" spellcheck="false">
-            <span id="heatCount" role="status"></span>
-          </div>
-          <div class="controls">
-            <div class="seg" id="heatMode" title="What the color shows">
-              <button data-v="perf" class="on">Perf</button><button data-v="ext" title="Pre-market / after-hours change">Ext hrs</button><button data-v="rv" title="Today's volume vs 10-day average">Rel vol</button><button data-v="off" title="Distance from 52-week high">Off high</button>
-            </div>
-            <div class="seg" id="heatTf">
-              <button data-v="c" class="on">1D</button><button data-v="w">1W</button><button data-v="m">1M</button><button data-v="q">3M</button><button data-v="ytd">YTD</button><button data-v="y">1Y</button>
-            </div>
-            <div class="seg" id="heatSize">
-              <button data-v="mc" class="on">Cap</button><button data-v="eq">Equal</button>
-            </div>
-          </div>
-        </div>
-        <div class="heatmap" id="heatmap"></div>
-        <div id="heatList" hidden>
-          <table class="rank-table" aria-label="Stock rankings">
-            <thead><tr>
-              <th scope="col"><button data-sort="label">Ticker</button></th>
-              <th scope="col"><button data-sort="price">Price</button></th>
-              <th scope="col" class="rank-cap"><button data-sort="size">Market cap</button></th>
-              <th scope="col" aria-sort="descending"><button data-sort="metric" id="rankMetric">1D change</button></th>
-            </tr></thead>
-            <tbody id="rankRows"></tbody>
-          </table>
-        </div>
-        <p class="explorer-empty" id="heatEmpty" hidden></p>
-        <div class="heat-foot">
-          <div class="legend-scale" id="heatLegend"></div>
-        </div>
-      </div>
-
-      <div class="span-4 col-stack fit">
-        <div class="panel">
-          <div class="panel-head"><div><h2>Fear &amp; Greed</h2><p class="sub">Composite of 7 live market signals</p></div></div>
-          <div id="fear"></div>
-        </div>
-        <div class="panel brief-panel">
-          <div class="panel-head"><div><h2>Market Brief</h2><p class="sub">Auto-generated from live data</p></div></div>
-          <div class="brief" id="brief"></div>
-        </div>
-      </div>
-    </section>
-   </div>
-
-    <!-- MONEY FLOW -->
-   <div class="tp" id="tp-flows" data-tp="flows" aria-labelledby="mt-flows">
-    <h3 class="section-title" id="flows"><span>02</span>Where the money is moving</h3>
-    <section class="grid">
-      <div class="panel span-4">
-        <div class="panel-head">
-          <div><h2>Sector Performance</h2><p class="sub">Cap-weighted, S&amp;P 500 members</p></div>
-          <div class="seg small" id="secTf"><button data-v="c" class="on">1D</button><button data-v="w">1W</button><button data-v="m">1M</button><button data-v="ytd">YTD</button></div>
-        </div>
-        <div id="sectorBars"></div>
-      </div>
-      <div class="panel span-4">
-        <div class="panel-head"><div><h2>Sector Rotation</h2><p class="sub">Relative to S&amp;P · x: 1-month strength · y: 1-week momentum · tails = last 4 weeks</p></div></div>
-        <div id="rrg" class="chart-box"></div>
-      </div>
-      <div class="panel span-4">
-        <div class="panel-head"><div><h2>Risk-On / Risk-Off</h2><p class="sub">Which side of each pair is winning today</p></div></div>
-        <div id="risk"></div>
-      </div>
-
-      <div class="panel span-7">
-        <div class="panel-head"><div><h2>Asset Class Flows</h2><p class="sub">ETF proxies · bar = today's move · volume vs 10-day average shows conviction</p></div></div>
-        <div id="assets"></div>
-      </div>
-      <div class="span-5 col-stack">
-        <div class="panel">
-          <div class="panel-head"><div><h2>Who's Moving the S&amp;P</h2><p class="sub">Index points contributed today</p></div></div>
-          <div id="contrib"></div>
-        </div>
-        <div class="panel grow">
-          <div class="panel-head"><div><h2>Sector Money Flow</h2><p class="sub">$ traded in rising minus falling stocks, by sector</p></div></div>
-          <div id="sectorFlow"></div>
-        </div>
-      </div>
-
-      <div class="panel span-12">
-        <div class="panel-head"><div><h2>Themes &amp; Industries</h2><p class="sub">Thematic ETFs · 1D / 1W / 1M</p></div></div>
-        <div class="themes" id="themes"></div>
-      </div>
-    </section>
-   </div>
-
-    <!-- BREADTH -->
-   <div class="tp" id="tp-stocks" data-tp="stocks" aria-labelledby="mt-stocks">
-    <h3 class="section-title" id="breadth"><span>03</span>Market health &amp; movers</h3>
-    <section class="grid">
-      <div class="panel span-6">
-        <div class="panel-head"><div><h2>Breadth</h2><p class="sub">S&amp;P 500 participation, live</p></div></div>
-        <div id="breadthNow"></div>
-      </div>
-      <div class="panel span-6">
-        <div class="panel-head"><div><h2>Breadth Trend</h2><p class="sub">1 year · daily closes</p></div></div>
-        <div id="breadthHist"></div>
-      </div>
-      <div class="panel span-7">
-        <div class="panel-head">
-          <div><h2>Movers</h2><p class="sub">S&amp;P 500 members</p></div>
-          <div class="seg small" id="moverTab"><button data-v="losers" class="on">Losers</button><button data-v="gainers">Gainers</button><button data-v="active">Most $ traded</button><button data-v="unusual">Unusual volume</button></div>
-        </div>
-        <div id="movers"></div>
-      </div>
-      <div class="panel span-5">
-        <div class="panel-head"><div><h2>Volatility</h2><p class="sub">Fear priced in options</p></div></div>
-        <div id="vol"></div>
-      </div>
-      <div class="panel span-7 fit">
-        <div class="panel-head"><div><h2>Earnings</h2><p class="sub">S&amp;P 500 reports · next 7 days and the market's reaction to recent ones</p></div></div>
-        <div id="earnings"></div>
-      </div>
-      <div class="panel span-5 wl-panel">
-        <div class="panel-head">
-          <div><h2>Watchlist</h2><p class="sub">Saved in this browser · ☆ in any chart to add</p></div>
-          <div class="wl-add"><input id="wlAdd" class="search" placeholder="Add ticker" autocomplete="off" spellcheck="false"></div>
-        </div>
-        <div id="watchlist"></div>
-        <div class="wl-quick" id="wlQuick"></div>
-      </div>
-    </section>
-   </div>
-
-    <!-- GLOBAL -->
-   <div class="tp" id="tp-world" data-tp="world" aria-labelledby="mt-world">
-    <nav class="m-jump" aria-label="Jump to">
-      <a href="#global">Global</a><a href="#rates">Rates</a><a href="#crypto">Crypto</a><a href="#commod">Commodities &amp; FX</a>
-    </nav>
-    <h3 class="section-title" id="global"><span>04</span>Global markets</h3>
-    <section class="grid">
-      <div class="panel span-8">
-        <div class="panel-head">
-          <div><h2>World Equity Map</h2><p class="sub">Latest session change of each country's benchmark index</p></div>
-        </div>
-        <div id="worldmap" class="chart-box map-box"></div>
-      </div>
-      <div class="panel span-4 fit">
-        <div class="panel-head"><div><h2>Indices by Region</h2><p class="sub">Sorted by today's move</p></div></div>
-        <div id="globalList" class="scroll-y"></div>
-      </div>
-    </section>
-
-    <!-- RATES -->
-    <h3 class="section-title" id="rates"><span>05</span>Bonds, rates &amp; credit</h3>
-    <section class="grid">
-      <div class="panel span-6 fit">
-        <div class="panel-head"><div><h2>Treasury Yield Curve</h2><p class="sub">US Treasury daily par yields · today vs history</p></div></div>
-        <div id="curve" class="chart-box"></div>
-      </div>
-      <div class="panel span-6">
-        <div class="panel-head"><div><h2>Rates &amp; Spreads</h2><p class="sub">Live yields · curve inversion signals</p></div></div>
-        <div id="rateTiles"></div>
-        <div id="spreadChart" class="chart-box"></div>
-      </div>
-    </section>
-
-    <!-- CRYPTO -->
-    <h3 class="section-title" id="crypto"><span>06</span>Crypto</h3>
-    <section class="grid">
-      <div class="panel span-8">
-        <div class="panel-head">
-          <div><h2>Crypto Heatmap</h2><p class="sub">Top coins · size = market cap · 24h change</p></div>
-          <div class="seg small" id="cryptoTf"><button data-v="c" class="on">24H</button><button data-v="w">7D</button><button data-v="m">30D</button><button data-v="ytd">YTD</button></div>
-        </div>
-        <div class="heatmap crypto-map" id="cryptomap"></div>
-      </div>
-      <div class="panel span-4 fit">
-        <div class="panel-head"><div><h2>Crypto Board</h2><p class="sub">Price · 24h · 7d</p></div></div>
-        <div id="cryptoList" class="scroll-y"></div>
-      </div>
-    </section>
-
-    <!-- COMMODITIES & FX -->
-    <h3 class="section-title" id="commod"><span>07</span>Commodities &amp; currencies</h3>
-    <section class="grid">
-      <div class="panel span-6">
-        <div class="panel-head"><div><h2>Commodities</h2><p class="sub">Front-month futures</p></div></div>
-        <div id="commodities"></div>
-      </div>
-      <div class="panel span-6">
-        <div class="panel-head"><div><h2>Currencies</h2><p class="sub">Dollar and major pairs</p></div></div>
-        <div id="fx"></div>
-      </div>
-    </section>
-   </div>
-
-    <!-- NEWS -->
-   <div class="tp" id="tp-news" data-tp="news" aria-labelledby="mt-news">
-    <h3 class="section-title" id="news"><span>08</span>Headlines</h3>
-    <section class="grid">
-      <div class="panel span-12">
-        <div class="panel-head"><div><h2>Live News</h2><p class="sub">Yahoo Finance · tickers show live moves</p></div></div>
-        <div class="news" id="newsList"></div>
-      </div>
-    </section>
-   </div>
-
+  <main id="wsRoot" tabindex="-1">
     <footer class="foot">
       Data: Yahoo Finance (quotes may be delayed up to 15 min for some exchanges) · U.S. Treasury · S&amp;P 500 list from datasets/s-and-p-500-companies.
-      Fear &amp; Greed, risk score and the market brief are computed locally by simple rules — informational only, not investment advice.
+      Fear &amp; Greed, risk score and the market brief are computed locally by simple rules. They describe the data and are not investment advice.
       <span id="statusLine"></span>
     </footer>
   </main>
 
-  <!-- Phone tab bar (shown at 767px and below; see tabs.js) -->
-  <nav id="m-tabs" role="tablist" aria-label="Sections">
-    <button type="button" role="tab" id="mt-market" data-m="market" aria-controls="tp-market" aria-selected="false" tabindex="-1">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="9" height="10" rx="1"/><rect x="14.5" y="3.5" width="6" height="6" rx="1"/><rect x="14.5" y="11.5" width="6" height="9" rx="1"/><rect x="3.5" y="15.5" width="9" height="5" rx="1"/></svg><span>Market</span>
-    </button>
-    <button type="button" role="tab" id="mt-flows" data-m="flows" aria-controls="tp-flows" aria-selected="false" tabindex="-1">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h13M13 4l4 4-4 4M20 16H7M11 12l-4 4 4 4"/></svg><span>Flows</span>
-    </button>
-    <button type="button" role="tab" id="mt-stocks" data-m="stocks" aria-controls="tp-stocks" aria-selected="false" tabindex="-1">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V12M12 20V5M19 20v-9"/></svg><span>Stocks</span>
-    </button>
-    <button type="button" role="tab" id="mt-world" data-m="world" aria-controls="tp-world" aria-selected="false" tabindex="-1">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.4 3.5 5.2 3.5 8.5s-1.1 6.1-3.5 8.5c-2.4-2.4-3.5-5.2-3.5-8.5s1.1-6.1 3.5-8.5z"/></svg><span>World</span>
-    </button>
-    <button type="button" role="tab" id="mt-news" data-m="news" aria-controls="tp-news" aria-selected="false" tabindex="-1">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4.5" width="16" height="15" rx="1.5"/><path d="M8 9h8M8 12.5h8M8 16h5"/></svg><span>News</span>
-    </button>
-  </nav>
+  <!-- Phone tab bar (767px and below; tabs.js) -->
+  <nav id="m-tabs" role="tablist" aria-label="Workspaces"></nav>
+  <div class="msheet" id="moreSheet" role="dialog" aria-modal="true" aria-label="More workspaces" hidden>
+    <div class="msheet-card">
+      <div class="msheet-h"><b>More</b><button type="button" class="close" data-close aria-label="Close">✕</button></div>
+      <div class="msheet-list"></div>
+    </div>
+  </div>
+
+  <!-- Keyboard shortcuts -->
+  <div class="keysheet" id="keysheet" role="dialog" aria-modal="true" aria-labelledby="ksTitle" hidden>
+    <div class="keysheet-card">
+      <div class="keysheet-h"><h2 id="ksTitle">Keyboard shortcuts</h2><button type="button" class="close" data-close aria-label="Close">✕</button></div>
+      <div class="keysheet-cols">
+        <section><h3>Anywhere</h3>
+          <div><kbd>/</kbd><span>Command bar</span></div>
+          <div><kbd>Ctrl K</kbd><span>Command bar</span></div>
+          <div><kbd>?</kbd><span>This sheet</span></div>
+          <div><kbd>Esc</kbd><span>Close chart, menu or sheet</span></div>
+          <h3>Charts</h3>
+          <div><kbd>← →</kbd><span>Move the crosshair</span></div>
+          <div><kbd>Shift ← →</kbd><span>Move faster</span></div>
+          <h3>Workspaces</h3>
+          <div id="ksWs"></div>
+        </section>
+        <section><h3>Command mnemonics</h3><p class="keysheet-note">Type these in the command bar. ‹ticker› means add a symbol, e.g. <kbd>GP AAPL</kbd>.</p><div id="ksMnemonics"></div></section>
+      </div>
+    </div>
+  </div>
 
   <!-- Detail drawer -->
-  <aside class="drawer" id="drawer" aria-hidden="true">
+  <aside class="drawer" id="drawer" aria-hidden="true" aria-label="Chart and details">
     <div class="drawer-head">
       <div>
         <div class="d-sym" id="dSym"></div>
         <div class="d-name" id="dName"></div>
       </div>
-      <div class="d-actions"><button class="star" id="dStar" title="Add to watchlist">☆</button><button class="close" id="dClose" aria-label="Close">✕</button></div>
+      <div class="d-actions"><button type="button" class="star" id="dStar" title="Add to watchlist">☆</button><button type="button" class="close" id="dClose" aria-label="Close">✕</button></div>
     </div>
     <div class="d-price" id="dPrice"></div>
-    <div class="seg small" id="dRange">
-      <button data-v="1D">1D</button><button data-v="5D">5D</button><button data-v="1M">1M</button><button data-v="6M" class="on">6M</button><button data-v="YTD">YTD</button><button data-v="1Y">1Y</button><button data-v="5Y">5Y</button>
+    <div class="seg small" id="dRange" role="group" aria-label="Chart range">
+      <button type="button" data-v="1D">1D</button><button type="button" data-v="5D">5D</button><button type="button" data-v="1M">1M</button><button type="button" data-v="6M" class="on">6M</button><button type="button" data-v="YTD">YTD</button><button type="button" data-v="1Y">1Y</button><button type="button" data-v="5Y">5Y</button>
     </div>
     <div class="d-chart" id="dChart"></div>
     <div class="d-stats" id="dStats"></div>

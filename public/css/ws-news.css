@@ -1,0 +1,5 @@
+/* =========================================================================
+   News workspace (#ws-news). Headline cards (.news, .nitem) are shared with
+   the chart drawer and live in style.css.
+   ========================================================================= */
+#ws-news .news { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }

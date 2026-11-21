@@ -1,0 +1,17 @@
+/* =========================================================================
+   Macro workspace (#ws-macro): bonds, rates & credit (existing) and the
+   economy section. Put economy styles below the moved block, scoped under
+   #ws-macro [data-section="economy"].
+   ========================================================================= */
+
+/* ---- Rates & credit (moved from style.css) ---- */
+/* ---------- Rates ---------- */
+.rate-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.rtile { background: var(--bg-2); border: 1px solid var(--line); border-radius: 5px; padding: 8px 10px; }
+.rtile.alert { border-color: rgba(255,176,0,.45); }
+.rtile .k { font-size: 10.5px; color: var(--ink-3); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+.rtile .v { font-family: var(--mono); font-size: 18px; font-weight: 700; margin-top: 2px; }
+.rtile .c { font-family: var(--mono); font-size: 11px; }
+.rtile .n { font-size: 10px; color: var(--ink-3); }
+
+/* ---- Economy ---- */

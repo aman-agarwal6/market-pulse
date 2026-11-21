@@ -108,12 +108,13 @@ export function pill(v, max = 3, d = 2) {
   return `<span class="pill" style="background:${heatColor(v, max)}">${fmtPct(v, d)}</span>`;
 }
 
-/** Segmented control wiring. */
+/** Segmented control wiring: marks the pressed button (.on + aria-pressed) and calls onChange(value). */
 export function seg(el, onChange) {
+  el.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x.classList.contains('on'))));
   el.addEventListener('click', e => {
     const b = e.target.closest('button');
     if (!b) return;
-    el.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    el.querySelectorAll('button').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); });
     onChange(b.dataset.v);
   });
 }
