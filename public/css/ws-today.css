@@ -3,6 +3,12 @@
    explorer, Fear & Greed, Market Brief.
    ========================================================================= */
 #ws-today .regime { margin-bottom: var(--sp-4); }
+/* Drawdown cell: quiet link to the long-run view of declines */
+#ws-today .rstat-link {
+  display: inline-block; margin-top: 4px; color: var(--ink-3); font-size: var(--fs-xs); line-height: 1.35;
+  text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 2px; transition: color var(--dur), text-decoration-color var(--dur);
+}
+#ws-today .rstat-link:hover { color: var(--amber); text-decoration-color: var(--amber-dim); }
 #ws-today .heat-panel .explorer-tools { margin-top: 0; }
 #ws-today .heat-foot { margin-top: var(--sp-3); }
 #ws-today #pFear .panel-body { display: flex; flex-direction: column; }

@@ -19,8 +19,13 @@
 //   normalize  rebase every series to this value (e.g. 100) at its first point, to compare growth
 //   yFmt       axis + tooltip number format;  tipDate: Date => string;  xTicks: count hint
 //   yDomain    [min, max] override;  zero: true forces 0 into the y range
-//   bands[]    { from, to, label, color }  shaded x ranges, labelled at the top
-//   refs[]     { v, label, color }  horizontal dashed lines
+//   xDomain    [from, to] fixed time range (dates as above), so stacked charts share an axis;
+//              points outside are clipped and the y range uses only the visible points; the
+//              y-axis column is then a fixed 56px so the plots line up
+//   bands[]    { from, to, label, short, color }  shaded x ranges, labelled at the top; a label
+//              that does not fit uses `short` if given, otherwise it is left out (never cut)
+//   refs[]     { v, label, color, labelAt: 'right' | 'left' }  horizontal dashed lines. Without
+//              labelAt the label sits at the right, or moves left if a series ends on top of it
 //   legend     true | false (default: shown when there are 2+ series)
 //   ariaLabel  description for screen readers
 //   empty      message when no series has data
@@ -65,9 +70,11 @@ export function tsChart(el, initial) {
       }
       return { ...s, i, color: s.color || SERIES_COLORS[i % SERIES_COLORS.length], data };
     });
-    // Master timeline for the crosshair: the series with the most points.
-    master = [...prepared].sort((a, b) => b.data.length - a.data.length)[0]?.data.filter(p => p.v != null) || [];
+    // Master timeline for the crosshair: the series with the most points (inside xDomain when set).
+    const [d0, d1] = xDom() || [];
+    master = [...prepared].sort((a, b) => b.data.length - a.data.length)[0]?.data.filter(p => p.v != null && (!d0 || (p.t >= d0 && p.t <= d1))) || [];
   }
+  const xDom = () => (o.xDomain && o.xDomain.length === 2 ? o.xDomain.map(toDate) : null);
 
   function fmtV(s, v) { return v == null ? '—' : (s.fmt || o.yFmt || defFmt)(v); }
 
@@ -102,14 +109,18 @@ export function tsChart(el, initial) {
     const has = prepared.some(s => s.data.some(p => p.v != null));
     if (!has) { plot.innerHTML = `<div class="tsc-empty">${escText(o.empty || 'No data for this range.')}</div>`; svg = null; renderLegend(); return; }
 
+    const fixedX = xDom();
     const all = prepared.flatMap(s => s.data);
-    const vals = all.map(p => p.v).filter(v => v != null);
-    const xExt = d3.extent(all, p => p.t);
+    const inX = fixedX ? all.filter(p => p.t >= fixedX[0] && p.t <= fixedX[1]) : all;
+    const vals = (inX.some(p => p.v != null) ? inX : all).map(p => p.v).filter(v => v != null);
+    const xExt = fixedX || d3.extent(all, p => p.t);
     let [lo, hi] = o.yDomain || d3.extent(vals);
     for (const r of o.refs || []) { lo = Math.min(lo, r.v); hi = Math.max(hi, r.v); }
     if (o.zero && !o.log) { lo = Math.min(lo, 0); hi = Math.max(hi, 0); }
     const yTickW = Math.max(...[lo, hi].map(v => (o.yFmt || defFmt)(v).length)) * 6.2 + 10;
-    const m = { t: (o.bands || []).some(b => b.label) ? 18 : 10, r: 12, b: 22, l: Math.max(34, Math.min(72, yTickW)) };
+    // With a fixed xDomain the y-axis column is a fixed 56px (wider only if labels need it), so
+    // stacked charts sharing a time range start and end their plots at the same x.
+    const m = { t: (o.bands || []).some(b => b.label) ? 18 : 10, r: 12, b: 22, l: fixedX ? Math.max(56, Math.min(72, yTickW)) : Math.max(34, Math.min(72, yTickW)) };
     const x = d3.scaleUtc(xExt, [m.l, W - m.r]);
     let y;
     if (o.log) {
@@ -133,7 +144,10 @@ export function tsChart(el, initial) {
       const x0 = x(Math.max(toDate(b.from), xExt[0])), x1 = x(Math.min(toDate(b.to), xExt[1]));
       if (!(x1 > x0)) continue;
       gb.append('rect').attr('x', x0).attr('width', x1 - x0).attr('y', 0).attr('height', H - m.b).attr('fill', b.color || 'var(--band)');
-      if (b.label && x1 - x0 > 34) labels.append('text').attr('x', x0 + 3).attr('y', 11).text(b.label.length * 5.6 > x1 - x0 ? b.label.slice(0, Math.floor((x1 - x0) / 5.6)) : b.label);
+      // 9.5px mono ≈ 5.8px per character; a label that does not fit is left out, never cut mid-word.
+      const fits = t => t && t.length * 5.8 + 6 <= x1 - x0;
+      const text = fits(b.label) ? b.label : fits(b.short) ? b.short : null;
+      if (text) labels.append('text').attr('x', x0 + 3).attr('y', 11).text(text);
     }
 
     // Grid + axes
@@ -145,9 +159,20 @@ export function tsChart(el, initial) {
     s.append('g').attr('class', 'axis').attr('transform', `translate(0,${H - m.b})`)
       .call(d3.axisBottom(x).ticks(o.xTicks || Math.max(2, Math.floor(W / 110))).tickSizeOuter(0));
 
+    // Last visible point of each series, to keep reference labels off the line ends.
+    const ends = prepared.map(p => [...p.data].reverse().find(d => d.v != null && (!fixedX || d.t <= fixedX[1]))).filter(Boolean).map(d => [x(d.t), y(d.v)]);
     for (const r of o.refs || []) {
-      s.append('line').attr('class', 'tsc-ref').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y(r.v)).attr('y2', y(r.v)).attr('stroke', r.color || 'var(--ink-4)');
-      if (r.label) s.append('text').attr('class', 'tsc-ref-l').attr('x', W - m.r - 2).attr('y', y(r.v) - 4).attr('text-anchor', 'end').text(r.label);
+      const ry = y(r.v);
+      s.append('line').attr('class', 'tsc-ref').attr('x1', m.l).attr('x2', W - m.r).attr('y1', ry).attr('y2', ry).attr('stroke', r.color || 'var(--ink-4)');
+      if (!r.label) continue;
+      let at = r.labelAt;
+      if (!at) {
+        const lw = String(r.label).length * 5.8 + 8;
+        const clash = ends.some(([ex, ey]) => ex >= W - m.r - lw && ey >= ry - 18 && ey <= ry + 4);
+        at = clash ? 'left' : 'right';
+      }
+      s.append('text').attr('class', 'tsc-ref-l').attr('x', at === 'left' ? m.l + 4 : W - m.r - 2).attr('y', ry - 4)
+        .attr('text-anchor', at === 'left' ? 'start' : 'end').text(r.label);
     }
 
     // Series

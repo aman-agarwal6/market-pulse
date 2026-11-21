@@ -149,15 +149,25 @@ function subnavEl(def) {
   return nav;
 }
 
+// Never call scrollIntoView on the sticky sub-nav: the browser would scroll the
+// PAGE to clear scroll-padding-top, which moves the sticky nav with it, forever.
+// Only the nav's own horizontal scroller is adjusted, and only on change.
 function paintSubnav(def, active) {
   const nav = rootOf(def.id).querySelector('.subnav');
-  if (!nav) return;
+  if (!nav || nav.dataset.active === active) return;
+  nav.dataset.active = active;
+  let onEl = null;
   for (const a of nav.querySelectorAll('a')) {
     const on = a.dataset.sec === active;
     a.classList.toggle('on', on);
-    if (on) a.setAttribute('aria-current', def.subnav === 'tabs' ? 'page' : 'location'); else a.removeAttribute('aria-current');
+    if (on) { onEl = a; a.setAttribute('aria-current', def.subnav === 'tabs' ? 'page' : 'location'); } else a.removeAttribute('aria-current');
   }
-  nav.querySelector('a.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  const strip = nav.querySelector('.subnav-in');
+  if (onEl && strip && strip.scrollWidth > strip.clientWidth) {
+    const l = onEl.offsetLeft - strip.offsetLeft, r = l + onEl.offsetWidth;
+    if (l < strip.scrollLeft) strip.scrollLeft = l - 12;
+    else if (r > strip.scrollLeft + strip.clientWidth) strip.scrollLeft = r - strip.clientWidth + 12;
+  }
 }
 
 function paintTabs() {
@@ -309,7 +319,7 @@ export function toggleSheet(force) {
   if (open) {
     sheetReturn = document.activeElement;
     import('./commands.js').then(({ commandHints }) => {
-      sheet.querySelector('#ksMnemonics').innerHTML = commandHints().map(c => `<div><kbd>${esc(c.hint)}${c.arg ? ' <i>' + esc(c.arg) + '</i>' : ''}</kbd><span>${esc(c.title)}</span></div>`).join('');
+      sheet.querySelector('#ksMnemonics').innerHTML = commandHints().map(c => `<div><kbd>${esc(c.hint)}${c.arg ? ' <i>' + esc(c.argOptional ? `[${c.arg}]` : `‹${c.arg}›`) + '</i>' : ''}</kbd><span>${esc(c.title)}</span></div>`).join('');
     });
     sheet.querySelector('#ksWs').innerHTML = workspaces.map(w => `<div><kbd>${w.key}</kbd><span>${esc(w.title)}</span></div>`).join('');
     sheet.hidden = false;

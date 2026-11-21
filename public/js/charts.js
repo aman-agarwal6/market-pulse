@@ -250,6 +250,7 @@ export function yieldCurve(el, yc) {
   svg.append('g').attr('class', 'axis').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5).tickFormat(d => d.toFixed(1) + '%').tickSizeOuter(0));
   svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).tickFormat(t => TENOR_SHORT[t]).tickSizeOuter(0));
   const line = d3.line().defined(d => d[1] != null).x(d => x(d[0])).y(d => y(d[1])).curve(d3.curveMonotoneX);
+  const endLabels = [];
   for (const s of series) {
     const data = tenors.map((t, i) => [t, yc[s.k].y[i]]);
     svg.append('path').attr('d', line(data)).attr('fill', 'none').attr('stroke', s.c).attr('stroke-width', s.wd).attr('opacity', s.k === 'latest' ? 1 : 0.85);
@@ -257,8 +258,17 @@ export function yieldCurve(el, yc) {
       data.filter(d => d[1] != null).forEach(d => svg.append('circle').attr('cx', x(d[0])).attr('cy', y(d[1])).attr('r', 3.5).attr('fill', s.c).attr('stroke', '#0b0f15').attr('stroke-width', 2));
     }
     const lastD = data.filter(d => d[1] != null).at(-1);
-    if (lastD) svg.append('text').attr('x', x(lastD[0]) + 8).attr('y', y(lastD[1]) + 3).attr('fill', s.c).attr('font-size', 10).attr('font-family', 'JetBrains Mono').text(lastD[1].toFixed(2));
+    if (lastD) endLabels.push({ x: x(lastD[0]) + 8, y: y(lastD[1]) + 3, c: s.c, t: lastD[1].toFixed(2) });
   }
+  // Right-edge value labels: keep their top-to-bottom order but at least one
+  // label height apart, so curves that end close together stay readable.
+  const GAP = 11; // 10px mono text
+  endLabels.sort((a, b) => a.y - b.y);
+  for (let i = 1; i < endLabels.length; i++) endLabels[i].y = Math.max(endLabels[i].y, endLabels[i - 1].y + GAP);
+  const over = (endLabels.at(-1)?.y ?? 0) - (H - m.b);
+  if (over > 0) endLabels.forEach(l => { l.y -= over; });
+  for (let i = endLabels.length - 2; i >= 0; i--) endLabels[i].y = Math.min(endLabels[i].y, endLabels[i + 1].y - GAP);
+  for (const l of endLabels) svg.append('text').attr('x', l.x).attr('y', l.y).attr('fill', l.c).attr('font-size', 10).attr('font-family', 'JetBrains Mono').text(l.t);
   if (yc.live) {
     for (const [t, v] of Object.entries(yc.live)) {
       if (v == null || !x(t)) continue;

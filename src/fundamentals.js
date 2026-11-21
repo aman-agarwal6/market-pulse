@@ -8,6 +8,7 @@
 import * as yahoo from './yahoo.js';
 import { perfFor } from './engine.js';
 import { factorRanks } from './factors.js';
+import { classCaps } from './shareclass.js';
 import { readDisk, writeDisk, report } from './store.js';
 import { n, pct, r as rnd, isoDate } from './normalize.js';
 import { round, isNum, stdev, beta, periodReturns } from './stats.js';
@@ -73,9 +74,12 @@ export function riskStats(h, mkt) {
 export const ratingScore = s => { const m = /^\s*([\d.]+)/.exec(s || ''); return m ? +m[1] : null; };
 
 /** Build one screener row. Pure given its inputs. */
-export function buildRow(u, q, hist, mkt, e, nowSec) {
+export function buildRow(u, q, hist, mkt, e, nowSec, cap = null) {
   const price = n(q.regularMarketPrice);
-  const mc = n(q.marketCap);
+  // mc = Yahoo's whole-company cap (used for company-level ratios such as FCF / cap);
+  // tickerCap = this ticker's own cap from src/shareclass.js (what the index weights).
+  const mc = cap?.companyCap ?? n(q.marketCap);
+  const tickerCap = cap?.mc ?? mc;
   const eps = n(q.epsTrailingTwelveMonths), epsF = n(q.epsForward);
   const sameCcy = !q.financialCurrency || q.financialCurrency === q.currency;
   const h52 = n(q.fiftyTwoWeekHigh), l52 = n(q.fiftyTwoWeekLow);
@@ -91,7 +95,8 @@ export function buildRow(u, q, hist, mkt, e, nowSec) {
   const fcfYield = e && isNum(e.fcfTTM) && mc && u.sec !== 'Financials' && (!e.financialCurrency || e.financialCurrency === q.currency) ? e.fcfTTM / mc * 100 : null;
   return {
     s: u.s, ys: u.ys, n: u.n, sec: u.sec, ind: u.ind,
-    price, chgPct: rnd(q.regularMarketChangePercent), marketCap: mc, currency: q.currency || null,
+    price, chgPct: rnd(q.regularMarketChangePercent), marketCap: tickerCap, companyMarketCap: mc,
+    shareClasses: cap && cap.classes.length > 1 ? cap.classes : null, capMethod: cap?.method ?? null, currency: q.currency || null,
     perf: { d: rnd(q.regularMarketChangePercent), w: perf.w, m: perf.m, q: perf.q, ytd: perf.ytd, y: perf.y },
     high52: h52, low52: l52, pos52Pct: h52 && l52 && h52 > l52 && price ? round((price - l52) / (h52 - l52) * 100, 1) : null,
     vsMa50Pct: ma50 && price ? round((price / ma50 - 1) * 100, 2) : null,
@@ -215,11 +220,12 @@ export function createFundamentals({ getState }) {
     const { universe, quotes, hist, status } = getState();
     const mkt = hist.get('^GSPC');
     const nowSec = Math.floor(Date.now() / 1000);
+    const caps = classCaps(universe, quotes);
     const rows = [];
     for (const u of universe) {
       const q = quotes.get(u.ys);
       if (!q || !isNum(q.regularMarketPrice)) continue;
-      rows.push(buildRow(u, q, hist, mkt, crawl.get(u.ys) || null, nowSec));
+      rows.push(buildRow(u, q, hist, mkt, crawl.get(u.ys) || null, nowSec, caps.get(u.ys) || null));
     }
     const ranks = factorRanks(rows);
     rows.forEach((r, i) => { r.factors = ranks[i]; });
@@ -241,7 +247,7 @@ export function createFundamentals({ getState }) {
         risk: 'vol1yPct = stdev of daily returns x sqrt(252); beta1y = OLS slope of daily returns on the S&P 500 (^GSPC), both over the 1-year history. r12_1Pct = first close of the 1-year history to the close 21 trading days ago; r6_1Pct = 126 to 21 trading days ago.',
         enrichment: 'grossMarginPct ... analysts come from quoteSummary (ttm margins, most-recent-quarter y/y growth, debtToEquity as a ratio). fcfYieldPct = reported trailing-12-month free cash flow (operating cash flow - capex, fundamentals-timeseries) / market cap; null for Financials. leveredFreeCashflow is Yahoo\'s separate "levered FCF" estimate, often much lower.',
         factors: 'factors.index / factors.sector: 0-100 percentile scores (100 = most value / quality / growth / momentum / low volatility). See src/factors.js for the exact inputs.',
-        marketCap: 'Yahoo market cap. For dual-class companies (GOOGL/GOOG, FOXA/FOX, NWSA/NWS) each class row shows the WHOLE company cap.',
+        marketCap: 'This ticker\'s own market cap (same numbers as the dashboard heatmap; rows sum to the index without double counting). For multi-class companies (GOOGL/GOOG, FOXA/FOX, NWSA/NWS) it is class shares x price (capMethod "class-shares") or a split of the company cap ("split"); companyMarketCap is Yahoo\'s whole-company cap, used for fcfYieldPct.',
       },
       count: rows.length,
       rows,

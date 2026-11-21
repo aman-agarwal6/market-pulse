@@ -5,6 +5,7 @@ import * as yahoo from './yahoo.js';
 import { cached, trimMemory, meta } from './store.js';
 import { plain, n, pct, r as rnd, isoDate } from './normalize.js';
 import { round, isNum } from './stats.js';
+import { companyKey } from './shareclass.js';
 
 const H = 3600000;
 const TTL = 6 * H;
@@ -141,7 +142,7 @@ export function pickPeers(sym, universe, quotes, max = 8) {
   if (!me) return null;
   const myCap = quotes.get(me.ys)?.marketCap;
   const byDist = list => list.map(u => ({ u, mc: quotes.get(u.ys)?.marketCap }))
-    .filter(x => x.mc && x.u.ys !== me.ys && x.u.n.replace(/\s*\(Class [A-Z]\)$/, '') !== me.n.replace(/\s*\(Class [A-Z]\)$/, ''))
+    .filter(x => x.mc && x.u.ys !== me.ys && companyKey(x.u.n) !== companyKey(me.n))
     .sort((a, b) => Math.abs(Math.log(a.mc / myCap)) - Math.abs(Math.log(b.mc / myCap)));
   const same = byDist(universe.filter(u => u.ind === me.ind)).map(x => ({ ...x, same: true }));
   const peers = same.slice(0, max);

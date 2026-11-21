@@ -8,7 +8,7 @@ import { store, emit, on, buildIndex, refreshExtra, lookup, watch, prefs, setCol
 import { initDetail, openDetail, refreshDetail } from './detail.js';
 import { initUI, notesOn, setNotes } from './ui.js';
 import { initShell, renderActive, workspaces, go, toggleSheet } from './shell.js';
-import { initCommandBar, registerCommand } from './commands.js';
+import { initCommandBar, registerCommand, findByHint } from './commands.js';
 import './ws/index.js';
 
 // ---------------------------------------------------------------------------
@@ -18,6 +18,20 @@ for (const w of workspaces) {
   registerCommand({ id: 'ws:' + w.id, title: w.title, hint: w.hint, aliases: w.aliases || [], key: w.key, group: 'Go to', kind: 'Workspace',
     keywords: w.sections.flatMap(s => [s.title, ...(s.keywords || [])]), run: () => go(w.id) });
   if (w.sections.length > 1) for (const s of w.sections) {
+    // One entry per mnemonic: if a workspace already registered a command with
+    // this section's hint (e.g. DES <ticker>), that command also covers the bare
+    // mnemonic: it takes the section's aliases and its argument becomes optional.
+    const owner = s.hint && findByHint(s.hint);
+    if (owner) {
+      owner.aliases = [...new Set([...owner.aliases, ...(s.aliases || [])])];
+      owner.keywords = [...new Set([...owner.keywords, s.title, ...(s.keywords || [])])];
+      if (owner.arg) {
+        owner.argOptional = true;
+        const run = owner.run;
+        owner.run = a => (a ? run(a) : go(w.id, s.id)); // bare mnemonic = the section, exactly
+      }
+      continue;
+    }
     registerCommand({ id: `sec:${w.id}:${s.id}`, title: `${w.title} › ${s.title}`, hint: s.hint, aliases: s.aliases || [], group: 'Go to', kind: 'Section',
       keywords: s.keywords || [], run: () => go(w.id, s.id) });
   }
@@ -174,6 +188,6 @@ setInterval(() => refreshExtra().then(() => emit('watch')), 30000);
 initUI();
 initDetail(lookup, watch);
 initShell();
-initCommandBar({ openDetail });
+initCommandBar({ openDetail, openCompany: s => go('research', 'company', { params: { s } }) });
 refreshExtra().then(() => emit('watch'));
 connect();

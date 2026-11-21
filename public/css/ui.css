@@ -136,8 +136,8 @@ table.dt { width: 100%; border-collapse: separate; border-spacing: 0; font-size:
 .keysheet-cols { display: grid; grid-template-columns: 1fr 1.3fr; gap: 24px; }
 .keysheet h3 { margin: 12px 0 6px; font-size: var(--fs-2xs); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
 .keysheet h3:first-child { margin-top: 0; }
-.keysheet-cols div > div, .keysheet section > div:not([id]) { display: grid; grid-template-columns: 96px 1fr; gap: 10px; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--line); font-size: var(--fs-sm); color: var(--ink-2); }
-.keysheet kbd { justify-self: start; }
+.keysheet-cols div > div, .keysheet section > div:not([id]) { display: grid; grid-template-columns: 140px 1fr; gap: 10px; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--line); font-size: var(--fs-sm); color: var(--ink-2); }
+.keysheet kbd { justify-self: start; white-space: nowrap; }
 .keysheet kbd i { font-style: normal; color: var(--ink-3); }
 .keysheet-note { margin: 0 0 6px; color: var(--ink-3); font-size: var(--fs-xs); }
 @media (max-width: 640px) { .keysheet-cols { grid-template-columns: 1fr; } }

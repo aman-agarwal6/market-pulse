@@ -70,8 +70,9 @@
 
   <main id="wsRoot" tabindex="-1">
     <footer class="foot">
-      Data: Yahoo Finance (quotes may be delayed up to 15 min for some exchanges) · U.S. Treasury · S&amp;P 500 list from datasets/s-and-p-500-companies.
-      Fear &amp; Greed, risk score and the market brief are computed locally by simple rules. They describe the data and are not investment advice.
+      <b>Data:</b> Yahoo Finance (some quotes delayed up to 15 min) · U.S. Treasury · FRED, Federal Reserve Bank of St. Louis · BLS and BEA release calendars · Federal Reserve FOMC calendar · New York Fed ·
+      Shiller long-run dataset (via datasets/s-and-p-500) · multpl.com for recent CAPE and P/E · S&amp;P 500 constituents (datasets/s-and-p-500-companies).
+      Scores, signals and the market brief are computed here by simple rules. Informational only, not investment advice.
       <span id="statusLine"></span>
     </footer>
   </main>
@@ -101,7 +102,7 @@
           <h3>Workspaces</h3>
           <div id="ksWs"></div>
         </section>
-        <section><h3>Command mnemonics</h3><p class="keysheet-note">Type these in the command bar. ‹ticker› means add a symbol, e.g. <kbd>GP AAPL</kbd>.</p><div id="ksMnemonics"></div></section>
+        <section><h3>Command mnemonics</h3><p class="keysheet-note">Type these in the command bar. ‹ticker› means a symbol is required (<kbd>GP AAPL</kbd>); [ticker] means it is optional. In results, Enter opens a ticker's company page and Shift+Enter its quick chart.</p><div id="ksMnemonics"></div></section>
       </div>
     </div>
   </div>
@@ -113,7 +114,7 @@
         <div class="d-sym" id="dSym"></div>
         <div class="d-name" id="dName"></div>
       </div>
-      <div class="d-actions"><button type="button" class="star" id="dStar" title="Add to watchlist">☆</button><button type="button" class="close" id="dClose" aria-label="Close">✕</button></div>
+      <div class="d-actions"><button type="button" class="d-act" id="dFull" title="Open the full company page (Research › Company)">Full page <span aria-hidden="true">↗</span></button><button type="button" class="star" id="dStar" title="Add to watchlist">☆</button><button type="button" class="close" id="dClose" aria-label="Close">✕</button></div>
     </div>
     <div class="d-price" id="dPrice"></div>
     <div class="seg small" id="dRange" role="group" aria-label="Chart range">

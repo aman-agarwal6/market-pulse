@@ -114,10 +114,12 @@ export function errorStateHTML({ title = 'Could not load this data', message = '
  *  delta      number = percent change (formatted + colored), or a preformatted string
  *  tone       override delta color: 'up' | 'down' | 'flat' | 'warn'; 'invert' flips (VIX up = bad)
  *  spark      array of numbers for a sparkline; sparkBase draws a dashed reference
+ *  sparkColor sparkline color (any CSS color, e.g. 'var(--ink-2)'). Default: up/down color by
+ *             direction, which is wrong when rising is bad (unemployment), so pass one there
  *  pct        0..100 percentile, drawn as a bar with a marker; pctLabel explains it
  *  sym        makes the tile open the chart drawer
  */
-export function statTileHTML({ label, value, delta = null, deltaLabel = '', tone = null, spark = null, sparkBase = null, pct = null, pctLabel = '', sub = '', sym = '', title = '' }) {
+export function statTileHTML({ label, value, delta = null, deltaLabel = '', tone = null, spark = null, sparkBase = null, sparkColor = null, pct = null, pctLabel = '', sub = '', sym = '', title = '' }) {
   let dHTML = '';
   if (delta != null && delta !== '') {
     const num = typeof delta === 'number';
@@ -125,7 +127,7 @@ export function statTileHTML({ label, value, delta = null, deltaLabel = '', tone
     if (tone === 'invert' && num) k = delta > 0 ? 'down' : delta < 0 ? 'up' : 'flat';
     dHTML = `<div class="stat-d ${k}">${num ? `${arrow(delta)} ${fmtPct(delta)}` : delta}${deltaLabel ? ` <span>${esc(deltaLabel)}</span>` : ''}</div>`;
   }
-  const sp = spark && spark.length > 1 ? `<div class="stat-spark">${sparkSVG(spark, { w: 160, h: 24, base: sparkBase })}</div>` : '';
+  const sp = spark && spark.length > 1 ? `<div class="stat-spark">${sparkSVG(spark, { w: 160, h: 24, base: sparkBase, ...(sparkColor ? { color: sparkColor } : {}) })}</div>` : '';
   const pb = pct != null && isFinite(pct) ? `<div class="pbar" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(pct)}" aria-label="${esc(pctLabel || 'Percentile')}"><i style="left:${Math.max(0, Math.min(100, pct))}%"></i></div>${pctLabel ? `<div class="pbar-l">${esc(pctLabel)}</div>` : ''}` : '';
   return `<div class="stat${sym ? ' is-link' : ''}"${sym ? ` data-sym="${esc(sym)}" tabindex="0" role="button"` : ''}${title ? ` title="${esc(title)}"` : ''}>
     <div class="stat-k">${esc(label)}</div><div class="stat-v">${value ?? '—'}</div>${dHTML}${sp}${pb}${sub ? `<div class="stat-s">${sub}</div>` : ''}</div>`;
@@ -227,24 +229,43 @@ export function fmtAsOf(t) {
   return (etDay.format(d) === etDay.format(new Date()) ? '' : etMD.format(d) + ' ') + etHM.format(d) + ' ET';
 }
 
-/** sourceBadgeHTML({ source = 'Yahoo Finance', key, asOf, staleAfter, label }) */
-export function sourceBadgeHTML({ source = 'Yahoo Finance', key = '', asOf = null, staleAfter = 0, label = '' } = {}) {
-  return `<span class="src" data-src="${esc(source)}"${key ? ` data-src-key="${esc(key)}"` : ''}${staleAfter ? ` data-stale-after="${staleAfter}"` : ''}${label ? ` data-src-label="${esc(label)}"` : ''}>${badgeText(source, asOf, label)}</span>`;
+/**
+ * sourceBadgeHTML({ source = 'Yahoo Finance', key, asOf, staleAfter, label, dateOnly })
+ *  dateOnly 'month' | 'day' — for data with no time of day: shows "data to Sep 2026" or
+ *           "data to Sep 30, 2026" instead of "as of 16:00 ET". asOf may then also be a
+ *           'YYYY-MM' or 'YYYY-MM-DD' string. Pass staleAfter if lateness should show.
+ */
+export function sourceBadgeHTML({ source = 'Yahoo Finance', key = '', asOf = null, staleAfter = 0, label = '', dateOnly = '' } = {}) {
+  return `<span class="src" data-src="${esc(source)}"${key ? ` data-src-key="${esc(key)}"` : ''}${staleAfter ? ` data-stale-after="${staleAfter}"` : ''}${label ? ` data-src-label="${esc(label)}"` : ''}${dateOnly ? ` data-date-only="${esc(dateOnly)}"` : ''}>${badgeText(source, asOf, label, dateOnly)}</span>`;
 }
-function badgeText(source, asOf, label) {
-  return `<i class="src-dot" aria-hidden="true"></i>${esc(source)}${label ? ' · ' + esc(label) : ''}${asOf ? ' · as of ' + fmtAsOf(asOf) : ''}`;
+const utcMonth = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', year: 'numeric' });
+const utcDay = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' });
+/** Dates without a time: 'YYYY-MM' / 'YYYY-MM-DD' strings are calendar dates (read as UTC, no day shift). */
+function toCalendarDate(t) {
+  if (typeof t === 'string' && /^\d{4}-\d{2}(-\d{2})?$/.test(t)) return new Date(t.length === 7 ? t + '-01T00:00:00Z' : t + 'T00:00:00Z');
+  return t instanceof Date ? t : new Date(t);
+}
+function badgeText(source, asOf, label, dateOnly = '') {
+  let when = '';
+  if (asOf) {
+    const d = dateOnly ? toCalendarDate(asOf) : null;
+    when = d && !isNaN(d) ? ' · data to ' + (dateOnly === 'day' ? utcDay : utcMonth).format(d) : !dateOnly ? ' · as of ' + fmtAsOf(asOf) : '';
+  }
+  return `<i class="src-dot" aria-hidden="true"></i>${esc(source)}${label ? ' · ' + esc(label) : ''}${when}`;
 }
 /** setSourceBadge(el, { asOf, error, stale }) — el is the .src element (or a panel containing one). */
 export function setSourceBadge(el, { asOf = null, error = null, stale = null } = {}) {
   const b = el?.classList?.contains('src') ? el : el?.querySelector('.src');
   if (!b) return;
   const key = b.dataset.srcKey;
-  const lim = +b.dataset.staleAfter || STALE_AFTER[key] || 0;
-  const isStale = stale ?? (!!asOf && !!lim && Date.now() - asOf > lim);
+  const dateOnly = b.dataset.dateOnly || '';
+  const lim = +b.dataset.staleAfter || (dateOnly ? 0 : STALE_AFTER[key]) || 0;
+  const t = asOf && dateOnly ? +toCalendarDate(asOf) : asOf;
+  const isStale = stale ?? (!!t && !!lim && Date.now() - t > lim);
   b.classList.toggle('is-stale', !error && isStale);
   b.classList.toggle('is-error', !!error);
   if (error) b.innerHTML = `<i class="src-dot" aria-hidden="true"></i>${esc(b.dataset.src)} · failed to load${typeof error === 'string' ? ': ' + esc(error) : ''}`;
-  else b.innerHTML = badgeText(b.dataset.src, asOf, b.dataset.srcLabel) + (isStale ? ' · stale' : '');
+  else b.innerHTML = badgeText(b.dataset.src, asOf, b.dataset.srcLabel, dateOnly) + (isStale ? ' · stale' : '');
   b.title = error ? 'The last request for this data failed.' : isStale ? 'This data has not refreshed recently.' : '';
 }
 /** refreshSourceBadges(root, status) — updates every keyed badge under root from snapshot.status. */
@@ -322,7 +343,10 @@ export async function loadPanel(panelEl, load, render, { isEmpty = d => d == nul
  *              tone: (v, row) => 'up' | 'down' | '', title, sortable = true, hideBelow: 'sm' | 'md' }]
  *  sym:     row => ticker; the row then opens the chart drawer (click, Enter)
  *  csv:     filename; adds an "Export CSV" button under the table
- * Returns { update(rows), sortBy(key, dir), exportCSV(), el }.
+ *  rowClass: row => 'cls …'          extra classes on a row (e.g. highlight the current one)
+ *  rowAttrs: row => ({ 'data-x': 1 }) extra attributes on a row (values are escaped)
+ *  onSort:   ({ key, dir }) => {}     called after the user re-sorts (dir 1 = ascending)
+ * Returns { update(rows), sortBy(key, dir), getSort() → { key, dir }, exportCSV(), el }.
  * Numbers are right-aligned tabular mono; the header sticks inside maxHeight.
  */
 export function dataTable(container, opts) {
@@ -353,7 +377,10 @@ export function dataTable(container, opts) {
     const list = sorted();
     const html = list.length ? list.map((r, i) => {
       const s = o.sym?.(r);
-      return `<tr tabindex="0" data-i="${rows.indexOf(r)}"${s ? ` data-sym="${esc(s)}" class="click"` : ''}>${cols.map(c => {
+      const klass = [s ? 'click' : '', o.rowClass?.(r) || ''].filter(Boolean).join(' ');
+      const extra = Object.entries(o.rowAttrs?.(r) || {}).filter(([k, v]) => v != null && v !== false && !/^(class|tabindex|data-i|data-sym)$/i.test(k))
+        .map(([k, v]) => ` ${esc(k)}="${esc(v === true ? '' : v)}"`).join('');
+      return `<tr tabindex="0" data-i="${rows.indexOf(r)}"${s ? ` data-sym="${esc(s)}"` : ''}${klass ? ` class="${esc(klass)}"` : ''}${extra}>${cols.map(c => {
         const v = c.value(r);
         const t = c.tone?.(v, r) || '';
         return `<td class="${c.type === 'num' ? 'n' : ''}${t ? ' ' + t : ''}${c.hideBelow ? ' hide-' + c.hideBelow : ''}">${c.fmt ? c.fmt(v, r) : esc(v ?? '—')}</td>`;
@@ -374,6 +401,7 @@ export function dataTable(container, opts) {
     sortKey = c.key;
     tbody._html = null;
     render();
+    o.onSort?.({ key: sortKey, dir });
   });
   tbody.addEventListener('keydown', e => {
     const tr = e.target.closest('tr');
@@ -397,6 +425,7 @@ export function dataTable(container, opts) {
     el: container,
     update(next) { rows = next || []; render(); },
     sortBy(key, d = -1) { sortKey = key; dir = d; tbody._html = null; render(); },
+    getSort: () => ({ key: sortKey, dir }),
     exportCSV,
   };
 }

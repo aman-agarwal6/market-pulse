@@ -1,59 +1,71 @@
-// Research — screener, company page and compare tool, one at a time.
-// Build here and in css/ws-research.css. Placeholder panels keep stable ids
-// (p<Name> panel, rs<Name> body); replace their bodies when data exists.
-import { panelHTML, emptyStateHTML } from '../ui.js';
+// Research — screener (EQS), company page (DES) and compare tool (COMP), one
+// at a time. Each section lives in its own module under ws/research/; this
+// file wires them to the shell and registers the command-bar mnemonics.
+import { registerCommand } from '../commands.js';
+import { go } from '../shell.js';
+import * as screener from './research/screener.js';
+import * as company from './research/company.js';
+import * as compare from './research/compare.js';
 
-const slot = (id, span, title, sub, note, message, ic, minH = 260, extra = {}) => panelHTML({
-  id: 'p' + id, span, title, sub, note, bodyId: 'rs' + id, minH,
-  body: emptyStateHTML({ icon: ic, title: 'No data loaded', message }), ...extra,
-});
+const openCompany = s => go('research', 'company', { params: { s } });
+const sectionRoot = id => document.querySelector(`#ws-research [data-section="${id}"]`);
+const mounted = new Set();
+let active = null;
 
-const MARKUP = `
-<div data-section="screener">
-  <section class="grid">
-    ${slot('ScreenFilters', 3, 'Filters', 'Sector · size · valuation · performance',
-      'Narrow the list down to companies that match what you are looking for.',
-      'Filters by sector, company size, valuation and recent performance.', 'search', 520)}
-    ${slot('ScreenResults', 9, 'Screener Results', 'S&amp;P 500 members matching the filters',
-      'Companies that pass every filter, in a sortable table.',
-      'Shows matching companies with price, size, valuation and returns. Select a row to open the company.', 'table', 520)}
-  </section>
-</div>
+function ensure(section) {
+  if (mounted.has(section)) return;
+  mounted.add(section);
+  const el = sectionRoot(section);
+  if (section === 'screener') screener.mount(el, { openCompany });
+  else if (section === 'company') company.mount(el, { go, open: openCompany });
+  else if (section === 'compare') compare.mount(el);
+}
 
-<div data-section="company">
-  <section class="grid">
-    ${slot('CoProfile', 12, 'Company', 'Profile · key numbers',
-      'What the company does and the numbers most often used to describe it.',
-      'Shows what the company does, its size, sector and the key numbers investors look at first.', 'search', 140)}
-    ${slot('CoChart', 8, 'Price History', 'Total return against the S&amp;P 500',
-      'How the stock has done compared with the overall market.',
-      'Charts the stock against the S&amp;P 500 over periods from one month to ten years.', 'chart', 340)}
-    ${slot('CoStats', 4, 'Fundamentals', 'Valuation · profitability · dividends',
-      'How the company’s valuation and profits compare with its sector.',
-      'Lists valuation, margins, growth and dividend measures next to the sector median.', 'table', 340)}
-  </section>
-</div>
-
-<div data-section="compare">
-  <section class="grid">
-    ${slot('CmpChart', 8, 'Compare', 'Growth of 100 · up to 6 tickers',
-      'Several stocks or funds on one chart, all starting from the same value.',
-      'Charts each ticker\u2019s growth from the same starting value, so different prices compare fairly.', 'chart', 380)}
-    ${slot('CmpTable', 4, 'Side by Side', 'Returns · risk · costs',
-      'The same numbers for each ticker in one table.',
-      'Shows returns, volatility, largest decline and fees for each ticker you add.', 'table', 380)}
-  </section>
-</div>`;
+// ---------------------------------------------------------------------------
+// Commands. DES and COMP take an optional argument: alone they open the
+// section, with tickers they open them. app.js skips the duplicate section
+// entries for DES / COMP because these commands own those mnemonics.
+// ---------------------------------------------------------------------------
+registerCommand({ id: 'research:des', title: 'Company page', hint: 'DES', aliases: ['DESC'], arg: 'ticker', argOptional: true, example: 'AAPL', group: 'Go to', kind: 'Research',
+  keywords: ['company', 'profile', 'fundamentals', 'description', 'financials'], run: t => (t ? openCompany(t) : go('research', 'company')) });
+registerCommand({ id: 'research:comp', title: 'Compare tickers', hint: 'COMP', aliases: ['COMPARE', 'VS'], arg: 'tickers', argOptional: true, example: 'SPY QQQ', group: 'Go to', kind: 'Research',
+  keywords: ['compare', 'versus', 'total return', 'side by side'],
+  run: t => {
+    const syms = String(t || '').split(/[\s,]+/).filter(Boolean).slice(0, 6);
+    go('research', 'compare', syms.length ? { params: { s: syms.join(',') } } : {});
+  } });
+for (const p of screener.presets()) {
+  registerCommand({ id: 'research:eqs:' + p.id, title: `Screen: ${p.name}`, sub: p.criteria, group: 'Go to', kind: 'Screen',
+    keywords: ['screener', 'screen', 'filter', ...p.name.toLowerCase().split(/\s+/)], run: () => go('research', 'screener', { params: { preset: p.id } }) });
+}
 
 export default {
   id: 'research', title: 'Research', key: '4', aliases: ['RESEARCH'], phone: 'main',
   icon: '<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/>',
   sections: [
-    { id: 'screener', title: 'Screener', hint: 'EQS', keywords: ['screen', 'filter', 'find stocks'] },
-    { id: 'company', title: 'Company', hint: 'DES', keywords: ['profile', 'fundamentals', 'company page'] },
-    { id: 'compare', title: 'Compare', hint: 'COMP', keywords: ['versus', 'vs', 'side by side'] },
+    { id: 'screener', title: 'Screener', hint: 'EQS', keywords: ['screen', 'filter', 'find stocks', 'equity screener'] },
+    { id: 'company', title: 'Company', hint: 'DES', keywords: ['profile', 'fundamentals', 'company page', 'etf page'] },
+    { id: 'compare', title: 'Compare', hint: 'COMP', keywords: ['versus', 'vs', 'side by side', 'total return'] },
   ],
   subnav: 'tabs',
-  mount(root) { root.innerHTML = MARKUP; },
-  // show(ctx) {}, hide() {}, update(S, ctx) {}, route(ctx) {} — see shell.js
+  mount(root) {
+    root.innerHTML = '<div data-section="screener" class="rs-sec"></div><div data-section="company" class="rs-sec"></div><div data-section="compare" class="rs-sec"></div>';
+  },
+  route(ctx) {
+    const sec = ctx.section || 'screener';
+    if (active && active !== sec) (active === 'screener' ? screener : active === 'compare' ? compare : null)?.hide?.();
+    active = sec;
+    ensure(sec);
+    if (sec === 'screener') screener.route(ctx.params);
+    else if (sec === 'company') company.route(ctx.params);
+    else if (sec === 'compare') compare.route(ctx.params);
+  },
+  hide() {
+    if (active === 'screener') screener.hide();
+    if (active === 'compare') compare.hide();
+    active = null;
+  },
+  update(S, ctx) {
+    if (ctx.section === 'company') company.live();
+  },
 };

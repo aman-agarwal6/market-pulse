@@ -483,6 +483,13 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
 .d-actions { display: flex; gap: 6px; }
 .star { background: var(--panel-3); border: 1px solid var(--line-2); color: var(--ink-2); height: 30px; padding: 0 10px; border-radius: 5px; cursor: pointer; font-size: 15px; }
 .star.on { color: var(--amber); border-color: var(--amber-dim); }
+.d-act {
+  display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: 5px;
+  background: var(--panel-3); color: var(--ink-2); font: 600 var(--fs-sm) var(--sans); white-space: nowrap; cursor: pointer; transition: color var(--dur), border-color var(--dur);
+}
+.d-act span { color: var(--ink-3); transition: color var(--dur); }
+.star:hover, .d-act:hover { color: var(--ink); border-color: var(--ink-4); }
+.d-act:hover span { color: var(--amber); }
 .d-legend { display: flex; gap: 12px; font-size: 10.5px; color: var(--ink-3); margin-top: 6px; font-family: var(--mono); }
 .d-legend i { display: inline-block; width: 12px; height: 2px; vertical-align: middle; margin-right: 5px; }
 

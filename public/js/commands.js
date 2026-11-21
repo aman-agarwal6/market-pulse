@@ -11,11 +11,19 @@
 //   group: 'Go to' | 'Actions' | 'Settings',   // default 'Actions'
 //   kind: 'Tool',                    // small label on the left (optional)
 //   arg: 'ticker',                   // the command takes text after the mnemonic: "DCA VOO"
+//   argOptional: true,               // with arg: also runs with no text, run('') (e.g. go to the section)
+//   example: 'VOO',                  // shown in the hint for optional arguments (default AAPL)
 //   state: () => 'On',               // optional right-hand status (settings)
 //   run: (arg) => {},                // arg = text after the mnemonic ('' when none)
 // })
+// A section of a workspace whose hint is already taken by a registered
+// command is not registered again: the command absorbs the section's aliases
+// and becomes argOptional, so each mnemonic appears once.
 // Typing "DCA VOO" runs run('VOO'). Typing just "DCA" and Enter fills "DCA "
-// so the user can add the argument.
+// so the user can add the argument (with argOptional it runs run('') instead).
+//
+// Ticker results: Enter opens the Research company page; Shift+Enter (or
+// Shift+click, or GP <ticker>) opens the quick chart drawer.
 import { esc, debounce, fmtPct, cls } from './util.js';
 import { fetchJSON } from './ui.js';
 import { store, lookup } from './store.js';
@@ -28,6 +36,8 @@ export function registerCommand(cmd) {
 export const getCommands = () => [...registry.values()];
 /** Commands that have a mnemonic, for the shortcuts sheet. */
 export const commandHints = () => getCommands().filter(c => c.hint).sort((a, b) => a.hint.localeCompare(b.hint));
+/** findByHint(word) — the command whose mnemonic or alias is word (case-insensitive), if any. */
+export const findByHint = w => { const W = String(w || '').toUpperCase(); return W ? getCommands().find(c => [c.hint, ...c.aliases].some(h => h && h.toUpperCase() === W)) : undefined; };
 /** runCommand(id, arg) — run a registered command programmatically. */
 export function runCommand(id, arg = '') { registry.get(id)?.run(arg); }
 
@@ -39,7 +49,7 @@ function scoreCommand(c, q) {
   const words = [c.hint, ...c.aliases].filter(Boolean).map(s => s.toUpperCase());
   const [first, ...rest] = Q.split(/\s+/);
   if (c.arg) {
-    if (words.includes(first)) return { score: rest.length ? 130 : 105, arg: q.slice(first.length).trim() };
+    if (words.includes(first)) return { score: rest.length ? 130 : c.argOptional ? 110 : 105, arg: q.slice(first.length).trim() };
     if (rest.length) return null;
   }
   if (words.includes(Q)) return { score: 110 };
@@ -58,6 +68,8 @@ let items = [];     // flattened visible rows
 let sel = 0;
 let remote = [];    // last /api/search result for the current query
 let openDetailFn = () => {};
+let openCompanyFn = s => openDetailFn(s);
+const openTicker = (s, quick) => (quick ? openDetailFn : openCompanyFn)(s);
 const RECENT_KEY = 'mp.recent';
 const recent = () => { try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch { return []; } };
 function pushRecent(s, n) {
@@ -67,14 +79,14 @@ function pushRecent(s, n) {
 function tickerRow(x, score) {
   const q = lookup(x.s);
   return { group: 'Tickers', kind: TYPE_LABEL[x.type] || x.type || 'Ticker', title: x.s, sub: x.n || '', score,
-    right: q?.c != null ? `<span class="${cls(q.c)}">${fmtPct(q.c)}</span>` : esc(x.exch || ''), run: () => { pushRecent(x.s, x.n); openDetailFn(x.s); } };
+    right: q?.c != null ? `<span class="${cls(q.c)}">${fmtPct(q.c)}</span>` : esc(x.exch || ''), run: quick => { pushRecent(x.s, x.n); openTicker(x.s, quick); } };
 }
 
 function compute() {
   const q = input.value.trim();
   const rows = [];
   if (!q) {
-    for (const r of recent()) rows.push({ group: 'Recent', kind: 'Ticker', title: r.s, sub: r.n || '', score: 1, run: () => openDetailFn(r.s) });
+    for (const r of recent()) rows.push({ group: 'Recent', kind: 'Ticker', title: r.s, sub: r.n || '', score: 1, run: quick => openTicker(r.s, quick) });
     for (const c of getCommands()) if (c.group === 'Go to' && c.kind === 'Workspace' || c.group === 'Settings') rows.push(cmdRow(c, { score: 0 }));
   } else {
     for (const c of getCommands()) { const m = scoreCommand(c, q); if (m) rows.push(cmdRow(c, m)); }
@@ -99,16 +111,19 @@ function compute() {
 
 function cmdRow(c, m) {
   const arg = m.arg ?? '';
-  const needsArg = c.arg && !arg;
+  const needsArg = c.arg && !arg && !c.argOptional;
   return {
     group: c.group, kind: c.kind || (c.group === 'Settings' ? 'Setting' : 'Action'),
     title: c.arg && arg ? `${c.title}: ${arg.toUpperCase()}` : c.title,
-    sub: needsArg ? `Type ${c.hint} then a ${c.arg}` : c.sub || '',
-    hint: c.hint ? c.hint + (c.arg ? ' ‹' + c.arg + '›' : '') : '', key: c.key || '',
+    sub: needsArg ? `Type ${c.hint} then a ${c.arg}` : c.arg && !arg ? `Add a ${c.arg} to open it directly, e.g. ${c.hint} ${c.example || 'AAPL'}` : c.sub || '',
+    hint: argHint(c), key: c.key || '',
     right: c.state ? esc(c.state()) : '', score: m.score,
     run: needsArg ? () => { input.value = c.hint + ' '; compute(); return 'keep'; } : () => c.run(arg.toUpperCase()),
   };
 }
+
+/** "GP ‹ticker›" (required argument) or "DES [ticker]" (optional). */
+export const argHint = c => (c.hint ? c.hint + (c.arg ? (c.argOptional ? ` [${c.arg}]` : ` ‹${c.arg}›`) : '') : '');
 
 function render() {
   let g = null, html = '';
@@ -121,11 +136,20 @@ function render() {
   });
   if (g) html += '</div>';
   const q = input.value.trim();
-  if (!items.length && q) html = `<div class="cmd-none">Press Enter to open a chart for <b>${esc(q.toUpperCase())}</b></div>`;
-  list.innerHTML = html + `<div class="cmd-foot" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>Enter</kbd> open</span><span><kbd>Esc</kbd> close</span><span class="cmd-foot-r">Try <kbd>GP AAPL</kbd> <kbd>WEI</kbd> <kbd>MOST</kbd></span></div>`;
+  if (!items.length && q) html = `<div class="cmd-none">Enter opens the company page for <b>${esc(q.toUpperCase())}</b>. Shift+Enter opens its chart.</div>`;
+  list.innerHTML = html + `<div class="cmd-foot" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>Enter</kbd> open · company page</span><span><kbd>Shift</kbd><kbd>Enter</kbd> quick chart</span><span><kbd>Esc</kbd> close</span><span class="cmd-foot-r">Try <kbd>DES AAPL</kbd> <kbd>WEI</kbd> <kbd>MOST</kbd></span></div>`;
   setOpen(document.activeElement === input);
   input.setAttribute('aria-activedescendant', items.length ? 'cmd-o' + sel : '');
-  list.querySelector('.cmd-item.sel')?.scrollIntoView({ block: 'nearest' });
+  keepInList(list.querySelector('.cmd-item.sel'));
+}
+
+// Scroll only the results list (never scrollIntoView: the bar is in the sticky top bar).
+function keepInList(el) {
+  if (!el) return;
+  const foot = list.querySelector('.cmd-foot')?.offsetHeight || 0;
+  const top = el.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop;
+  if (top < list.scrollTop) list.scrollTop = top - 24; // room for the group header
+  else if (top + el.offsetHeight > list.scrollTop + list.clientHeight - foot) list.scrollTop = top + el.offsetHeight - list.clientHeight + foot;
 }
 
 function setOpen(on) {
@@ -133,11 +157,11 @@ function setOpen(on) {
   input.setAttribute('aria-expanded', String(on));
 }
 
-function pick(i) {
+function pick(i, quick = false) {
   const r = items[i];
-  const q = input.value.trim();
-  if (!r) { if (q) { openDetailFn(q.toUpperCase()); pushRecent(q.toUpperCase(), ''); } close(); return; }
-  if (r.run() === 'keep') return;
+  const q = input.value.trim().toUpperCase();
+  if (!r) { close(); if (q) { pushRecent(q, ''); openTicker(q, quick); } return; }
+  if (r.run(quick) === 'keep') return;
   close();
 }
 function close() { input.value = ''; remote = []; items = []; setOpen(false); input.blur(); }
@@ -151,9 +175,10 @@ const searchRemote = debounce(async q => {
   } catch { /* local results only */ }
 }, 160);
 
-/** initCommandBar({ openDetail }) — wires #cmdInput / #cmdList. */
-export function initCommandBar({ openDetail }) {
+/** initCommandBar({ openDetail, openCompany }) — wires #cmdInput / #cmdList. */
+export function initCommandBar({ openDetail, openCompany }) {
   openDetailFn = openDetail;
+  if (openCompany) openCompanyFn = openCompany;
   input = document.getElementById('cmdInput');
   list = document.getElementById('cmdList');
   wrap = input.closest('.cmd');
@@ -171,13 +196,13 @@ export function initCommandBar({ openDetail }) {
       if (!items.length) return;
       sel = (sel + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
       render();
-    } else if (e.key === 'Enter') { e.preventDefault(); pick(sel); }
+    } else if (e.key === 'Enter') { e.preventDefault(); pick(sel, e.shiftKey); }
     else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (input.value) { input.value = ''; compute(); } else close(); }
   });
   list.addEventListener('mousedown', e => {
     const it = e.target.closest('[data-i]');
     e.preventDefault();
-    if (it) pick(+it.dataset.i);
+    if (it) pick(+it.dataset.i, e.shiftKey);
   });
   list.addEventListener('mousemove', e => {
     const it = e.target.closest('[data-i]');

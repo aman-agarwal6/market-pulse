@@ -3,6 +3,7 @@
 import {
   STRIP, SECTORS, THEMES, ASSETS, RISK_PAIRS, GLOBAL, CRYPTO, COMMODITIES, FX, RATES, VOL, FUTURES,
 } from './config.js';
+import { classCaps } from './shareclass.js';
 
 const isCrypto = s => /-USD$/.test(s);
 const num = v => (typeof v === 'number' && isFinite(v) ? v : null);
@@ -178,11 +179,14 @@ export function buildSnapshot(state) {
 
   // ---- Stocks --------------------------------------------------------------
   const stocks = [];
+  // Per-ticker caps that do not double count multi-class companies (see src/shareclass.js).
+  const caps = classCaps(universe, quotes);
   for (const u of universe) {
     const q = quotes.get(u.ys);
     const cq = compactQuote(u.ys, q, hist);
     if (!cq || cq.p == null) continue;
-    stocks.push({ ...cq, s: u.s, ys: u.ys, n: u.n, sec: u.sec, ind: u.ind, et: num(q.earningsTimestamp), ets: num(q.earningsTimestampStart), eest: !!q.isEarningsDateEstimate });
+    const mc = caps.get(u.ys)?.mc ?? cq.mc;
+    stocks.push({ ...cq, mc, s: u.s, ys: u.ys, n: u.n, sec: u.sec, ind: u.ind, et: num(q.earningsTimestamp), ets: num(q.earningsTimestampStart), eest: !!q.isEarningsDateEstimate });
   }
   const totalMc = stocks.reduce((a, x) => a + (x.mc || 0), 0);
   const spx = getM('^GSPC');

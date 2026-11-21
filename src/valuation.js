@@ -5,10 +5,12 @@
 //
 //  Company de-duplication
 //    Yahoo reports each share class (GOOGL/GOOG, FOXA/FOX, NWSA/NWS) with the
-//    WHOLE company's market cap (price x total shares). Summing both classes
-//    would count Alphabet twice, so every aggregate below first collapses
-//    classes into one company (key = name without "(Class X)"), keeping the
-//    class with the most shares outstanding.
+//    WHOLE company's market cap. Per-ticker caps come from src/shareclass.js
+//    (class shares x price, or a split of the company cap) - the same numbers
+//    the dashboard heatmap uses - and classes are summed into one company
+//    (key = name without "(Class X)"). EPS/yields come from the class with the
+//    most shares outstanding; E = companyCap x EPS / price then equals EPS x
+//    listed shares, consistent with the cap.
 //
 //  Company earnings (E)
 //    E_i = marketCap_i x EPS_i / price_i
@@ -51,22 +53,31 @@
 // Coverage is reported for every ratio as companies used and % of total cap.
 import { isNum } from './stats.js';
 
-const num = v => (isNum(v) ? v : null);
-export const companyKey = name => String(name || '').replace(/\s*\(Class [A-Z]\)\s*$/i, '').trim();
+import { classCaps, companyKey } from './shareclass.js';
 
-/** Collapse share classes. Returns [{ key, members:[universe rows], u, q }] (u/q = chosen class). */
+const num = v => (isNum(v) ? v : null);
+export { companyKey };
+
+/**
+ * Collapse share classes into companies. Returns [{ key, members:[symbols], u, q }]:
+ * u/q = the class with the most shares (its EPS, yields etc. are used), with
+ * q.marketCap replaced by the SUM of the per-class caps from classCaps() - the
+ * same caps the dashboard uses - so the company is counted exactly once.
+ */
 export function companies(universe, quotes) {
+  const caps = classCaps(universe, quotes);
   const groups = new Map();
   for (const u of universe) {
     const q = quotes.get(u.ys);
-    if (!q || !num(q.marketCap) || !num(q.regularMarketPrice)) continue;
-    const k = companyKey(u.n);
-    const g = groups.get(k) || { key: k, members: [], u: null, q: null };
+    const c = caps.get(u.ys);
+    if (!q || !c || !num(q.regularMarketPrice)) continue;
+    const g = groups.get(c.companyKey) || { key: c.companyKey, members: [], u: null, q: null, cap: 0 };
     g.members.push(u.s);
+    g.cap += c.mc;
     if (!g.q || (num(q.sharesOutstanding) || 0) > (num(g.q.sharesOutstanding) || 0)) { g.u = u; g.q = q; }
-    groups.set(k, g);
+    groups.set(c.companyKey, g);
   }
-  return [...groups.values()];
+  return [...groups.values()].map(({ cap, ...g }) => ({ ...g, q: { ...g.q, marketCap: cap } }));
 }
 
 /** Aggregate valuation for a list of companies (from companies()). */

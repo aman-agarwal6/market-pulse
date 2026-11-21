@@ -394,6 +394,13 @@ async function main() {
   state.universe = await loadUniverse(DATA);
   console.log(`[boot] ${state.universe.length} S&P 500 constituents loaded`);
 
+  server.on('error', err => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`\n  Port ${PORT} is already in use. Market Pulse may already be running in another window;\n  close it, or start on another port (for example: set PORT=3005, then start again).\n`);
+      process.exit(1);
+    }
+    throw err;
+  });
   server.listen(PORT, HOST, () => {
     console.log(`\n  MARKET PULSE running  →  http://localhost:${PORT}${HOST === '127.0.0.1' ? '' : `  (listening on ${HOST})`}${SITE_PASSWORD ? '  [password on]' : ''}\n`);
   });

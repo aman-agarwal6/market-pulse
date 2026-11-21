@@ -17,6 +17,13 @@ export function initDetail(lookup, watchApi) {
   $('#dClose').addEventListener('click', closeDetail);
   $('#scrim').addEventListener('click', closeDetail);
   $('#dStar').addEventListener('click', () => { if (current) { watch.toggle(current); renderStar(); } });
+  // "Full page" (markup in index.html): the Research workspace's company page for this symbol.
+  $('#dFull').addEventListener('click', () => {
+    if (!current) return;
+    const s = current;
+    closeDetail();
+    location.hash = '#/research/company?s=' + encodeURIComponent(s);
+  });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetail(); });
   $('#dRange').addEventListener('click', e => {
     const b = e.target.closest('button');

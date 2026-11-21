@@ -49,10 +49,12 @@ export function renderRegime(el, S) {
   const regime = dd != null && dd <= -20 ? 'BEAR MARKET' : dd != null && dd <= -10 ? 'CORRECTION' : c <= -3 ? 'SEVERE SELLOFF' : c <= -1.5 ? 'RISK-OFF' : c >= 1.5 ? 'RISK-ON RALLY' : c < -0.3 ? 'MILD WEAKNESS' : c > 0.3 ? 'GRINDING HIGHER' : 'RANGEBOUND';
   const tone = c <= -1 || (dd != null && dd <= -10) ? 'bad' : c >= 1 ? 'good' : 'neutral';
   const ad = b.n ? `${b.adv} ▲ / ${b.dec} ▼` : '—';
-  const stat = (k, v, s, klass = '') => `<div class="rstat"><div class="k">${k}</div><div class="v ${klass}">${v}</div><div class="s">${s}</div></div>`;
+  const stat = (k, v, s, klass = '', extra = '') => `<div class="rstat"><div class="k">${k}</div><div class="v ${klass}">${v}</div><div class="s">${s}</div>${extra}</div>`;
+  // Long-Term measures declines from the record close; this is from the 52-week intraday high, so say so.
+  const ddLink = '<a class="rstat-link" href="#/longterm/history" title="Long-Term › History: past S&amp;P 500 declines and recoveries, measured from record closes">How this decline compares with history →</a>';
   el.innerHTML = `<div class="regime-badge ${tone}"><div class="k">Market regime</div><div class="v">${regime}</div></div>
     <div class="regime-stats">
-      ${stat('S&amp;P drawdown', dd != null ? fmtPct(dd, 1) : '—', 'from 52-week high', cls(dd))}
+      ${stat('S&amp;P drawdown', dd != null ? fmtPct(dd, 1) : '—', 'from 52-week intraday high', cls(dd), ddLink)}
       ${stat('Advancers / Decliners', ad, `${b.n ? Math.round(b.dec / b.n * 100) : 0}% of S&amp;P down`)}
       ${stat('Equal-weight S&amp;P', fmtPct(b.eqWeight), 'average stock today', cls(b.eqWeight))}
       ${stat('Fear &amp; Greed', S.fear?.score ?? '—', S.fear?.label || '', '')}

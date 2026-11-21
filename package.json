@@ -1,7 +1,7 @@
 {
   "name": "market-pulse",
-  "version": "1.0.0",
-  "description": "Local live market heatmap and money-flow dashboard",
+  "version": "2.0.0",
+  "description": "Market Pulse: a market dashboard you run on your own computer. Live S&P 500 heatmap and flows, long-term history and valuation, stock and ETF research, and the economy in plain English. Free data, no API keys.",
   "type": "module",
   "main": "server.js",
   "scripts": {
@@ -17,6 +17,6 @@
     "world-atlas": "^2.0.2"
   },
   "engines": {
-    "node": "24.x"
+    "node": ">=24"
   }
 }
